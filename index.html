@@ -1,0 +1,2808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Note</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <style id="printMargin">@page { margin: 1in; }</style>
+  <style>
+    :root {
+      --surface: rgba(255, 255, 255, 0.97);
+      --line: rgba(17, 17, 17, 0.08);
+      --line-strong: rgba(17, 17, 17, 0.16);
+      --text: #171717;
+      --muted: #707070;
+      --editor-width: min(1040px, calc(100vw - 96px));
+      --ui-width: min(1100px, calc(100vw - 32px));
+      --page-hpad: 56px;
+      font-family: "Manrope", "Helvetica Neue", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+      color: var(--text);
+    }
+
+    button,
+    select,
+    input,
+    textarea {
+      font: inherit;
+      color: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: flex;
+    }
+
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(-100%);
+      transition: transform 180ms ease;
+      overflow: hidden;
+    }
+
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .sidebar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 16px 14px 12px;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+
+    .sidebar-head strong {
+      font-size: 0.9rem;
+    }
+
+    .sidebar-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .notes-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    .note-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+    }
+
+    .note-open {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      min-width: 0;
+    }
+
+    .note-open:hover,
+    .note-open:focus-visible {
+      outline: none;
+      background: rgba(17, 17, 17, 0.05);
+    }
+
+    .note-open.active {
+      background: rgba(17, 17, 17, 0.08);
+    }
+
+    .note-title {
+      display: block;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .note-meta {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .note-delete {
+      min-width: 30px;
+      min-height: 30px;
+      flex-shrink: 0;
+    }
+
+    .shell {
+      flex: 1;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .topbar,
+    .tools-panel,
+    .page-wrap,
+    .status-strip {
+      width: var(--ui-width);
+      margin: 0 auto;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 4px 10px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(17, 17, 17, 0.04);
+    }
+
+    .title {
+      font-size: 0.98rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      font-family: KaTeX_Main, 'Computer Modern', Georgia, serif;
+    }
+    .title .katex {
+      font-size: 1em;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .tool,
+    select,
+    input[type="color"],
+    .finder input,
+    .finder button {
+      min-height: 38px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      padding: 0 12px;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+
+    .tool {
+      cursor: pointer;
+      min-width: 38px;
+    }
+
+    .pill,
+    select,
+    input[type="color"],
+    .finder input,
+    .finder button {
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 0 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #34c759;
+      flex-shrink: 0;
+      transition: background 300ms ease;
+    }
+    .status-dot.saving { background: #ffcc00; }
+    .status-dot.error  { background: #ff3b30; }
+
+    .tool:hover,
+    .tool:focus-visible,
+    select:hover,
+    select:focus-visible,
+    input[type="color"]:hover,
+    input[type="color"]:focus-visible,
+    .finder input:focus-visible,
+    .finder button:focus-visible,
+    .code-runner textarea:focus-visible {
+      outline: none;
+      border-color: var(--line-strong);
+      background: #f4f4f4;
+    }
+
+    .tool.active,
+    .tool[data-role="primary"] {
+      background: #111111;
+      color: #ffffff;
+      border-color: #111111;
+    }
+
+    .tools-panel {
+      padding: 4px 4px 6px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.96);
+      backdrop-filter: blur(8px);
+    }
+
+    .tools-panel[hidden] {
+      display: none;
+    }
+
+    .link-popup {
+      position: fixed;
+      z-index: 300;
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 300px;
+    }
+    .link-popup[hidden] { display: none; }
+    .link-popup input[type="url"],
+    .link-popup input[type="text"] {
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      width: 100%;
+    }
+    .link-popup input:focus {
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26,115,232,0.12);
+    }
+    .link-popup-row {
+      display: flex;
+      gap: 6px;
+    }
+    .link-popup-hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .notes-panel {
+      width: var(--ui-width);
+      margin: 0 auto;
+      padding: 12px 4px 0;
+    }
+
+    .notes-panel[hidden] {
+      display: none;
+    }
+
+    .notes-shell {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    .notes-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .notes-head strong {
+      font-size: 0.92rem;
+    }
+
+    .notes-head span {
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .notes-list {
+      display: grid;
+      gap: 0;
+    }
+
+    .note-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid rgba(17, 17, 17, 0.05);
+    }
+
+    .note-open {
+      border: 0;
+      background: transparent;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .note-open:hover,
+    .note-open:focus-visible {
+      outline: none;
+      background: rgba(17, 17, 17, 0.05);
+    }
+
+    .note-open.active {
+      background: rgba(17, 17, 17, 0.08);
+    }
+
+    .note-title {
+      display: block;
+      font-weight: 600;
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+
+    .note-meta {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .note-delete {
+      min-width: 38px;
+    }
+
+    .toolbar {
+      width: var(--ui-width);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 3px;
+      padding: 4px 0;
+    }
+
+    select {
+      padding-right: 28px;
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: transparent;
+      padding-left: 8px;
+      font-size: 0.88rem;
+    }
+
+    select:hover,
+    select:focus-visible {
+      outline: none;
+      border-color: var(--line-strong);
+      background: #f4f4f4;
+    }
+
+    .tb-sep {
+      width: 1px;
+      height: 22px;
+      background: var(--line);
+      margin: 0 5px;
+      flex-shrink: 0;
+    }
+
+    .tb-stats {
+      font-size: 0.82rem;
+      color: var(--muted);
+      padding: 0 6px;
+      white-space: nowrap;
+    }
+
+    .find-input {
+      height: 34px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: transparent;
+      padding: 0 10px;
+      font: inherit;
+      font-size: 0.85rem;
+      width: 110px;
+      color: var(--text);
+    }
+
+    .find-input:focus {
+      outline: none;
+      border-color: var(--line-strong);
+      background: #f4f4f4;
+    }
+
+    .tool-color {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: transparent;
+      transition: border-color 120ms;
+    }
+
+    .tool-color:hover {
+      border-color: var(--line-strong);
+    }
+
+    .tool-color input[type="color"] {
+      width: 18px;
+      height: 18px;
+      border: none;
+      background: none;
+      padding: 0;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+
+    .workspace {
+      min-height: 0;
+    }
+
+    .page-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .page {
+      width: var(--editor-width);
+      min-height: calc(100vh - 76px);
+      padding: 56px var(--page-hpad) 96px;
+      border: 0;
+      outline: none;
+      background: transparent;
+      box-shadow: none;
+      line-height: 1.75;
+      font-size: 1.06rem;
+      font-weight: 500;
+      overflow-wrap: break-word;
+    }
+
+    .page a {
+      color: #1a73e8;
+      text-decoration: underline;
+      text-decoration-color: rgba(26,115,232,0.35);
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+    .page a:hover {
+      text-decoration-color: #1a73e8;
+    }
+
+    .page h1,
+    .page h2,
+    .page h3 {
+      line-height: 1.12;
+      letter-spacing: -0.04em;
+      margin-top: 1.3em;
+      margin-bottom: 0.35em;
+    }
+
+    .page h1 {
+      font-size: clamp(3rem, 7vw, 5rem);
+      font-weight: 700;
+    }
+
+    .page h2 {
+      font-size: clamp(2rem, 4vw, 2.8rem);
+    }
+
+    .page h3 {
+      font-size: clamp(1.45rem, 3vw, 1.9rem);
+    }
+
+    .page h1:first-child,
+    .page h2:first-child,
+    .page h3:first-child,
+    .page p:first-child {
+      margin-top: 0;
+    }
+
+    .page p,
+    .page li,
+    .page blockquote,
+    .page td,
+    .page th {
+      font-size: 1.06rem;
+    }
+
+    .page table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0;
+    }
+
+    .page th,
+    .page td {
+      border: 1px solid #191919;
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+
+    /* ── Editable Table Widget ── */
+    .table-widget {
+      width: 100%;
+      margin: 16px 0;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .table-widget[contenteditable="false"] { cursor: default; }
+    .table-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(17,17,17,0.02);
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .table-head .tool {
+      min-height: 24px;
+      min-width: auto;
+      padding: 0 6px;
+      font-size: 0.78rem;
+      border-radius: 3px;
+    }
+    .table-actions { display: flex; gap: 3px; align-items: center; }
+    .table-widget table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0;
+    }
+    .table-widget th,
+    .table-widget td {
+      border: 1px solid var(--line);
+      padding: 6px 10px;
+      font-size: 0.92rem;
+      min-width: 48px;
+      outline: none;
+    }
+    .table-widget th { background: rgba(17,17,17,0.03); font-weight: 600; }
+    .table-widget td:focus,
+    .table-widget th:focus { background: rgba(26,115,232,0.06); }
+    .table-widget .table-row-handle {
+      width: 24px;
+      min-width: 24px;
+      padding: 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.72rem;
+      user-select: none;
+      cursor: default;
+      background: rgba(17,17,17,0.02);
+    }
+
+    .page img {
+      max-width: 100%;
+      border-radius: 12px;
+      margin: 16px 0;
+    }
+
+    .page blockquote {
+      margin: 18px 0;
+      padding: 8px 0 8px 18px;
+      border-left: 3px solid #111111;
+      color: #2d2d2d;
+    }
+
+    .page pre:not(.code-output) {
+      padding: 16px;
+      background: #111111;
+      color: #ffffff;
+      border-radius: 14px;
+      overflow-x: auto;
+    }
+
+    .math-inline,
+    .math-block {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 4px;
+      cursor: pointer;
+      vertical-align: middle;
+    }
+
+    .math-inline:hover,
+    .math-block:hover {
+      background: rgba(17, 17, 17, 0.04);
+    }
+
+    .math-block {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      padding: 12px 0;
+      margin: 8px 0;
+    }
+
+    .math-source {
+      display: none;
+    }
+
+    .math-editor {
+      display: inline-block;
+      font-family: "Courier New", monospace;
+      font-size: 0.92rem;
+      border: none;
+      border-bottom: 1.5px solid #111;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      min-width: 60px;
+      width: auto;
+      padding: 0 2px;
+      vertical-align: middle;
+    }
+
+    .math-editing {
+      background: rgba(17,17,17,0.04);
+    }
+
+    .math-error {
+      color: #8f1d1d;
+      font-size: 0.92rem;
+      white-space: pre-wrap;
+    }
+
+    .math-preview {
+      position: fixed;
+      z-index: 200;
+      background: #ffffff;
+      border: 1px solid rgba(17,17,17,0.12);
+      border-radius: 12px;
+      padding: 10px 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.09);
+      pointer-events: none;
+      max-width: 420px;
+      min-height: 40px;
+      font-size: 1rem;
+    }
+
+    .code-lang-badge {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-family: "Courier New", monospace;
+      padding: 0 4px;
+    }
+
+    .code-runner {
+      width: 100%;
+      margin: 12px 0;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      font-family: "Courier New", monospace;
+    }
+
+    .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 6px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(17,17,17,0.02);
+    }
+
+    .code-head .tool {
+      min-height: 26px;
+      min-width: auto;
+      padding: 0 8px;
+      font-size: 0.8rem;
+      border-radius: 3px;
+    }
+
+    .code-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .code-input,
+    .code-stdin {
+      display: block;
+      width: 100%;
+      padding: 10px 12px;
+      resize: vertical;
+      font-family: "Courier New", monospace;
+      font-size: 0.88rem;
+      line-height: 1.55;
+      border: none;
+      background: transparent;
+      outline: none;
+      min-height: 100px;
+      color: var(--text);
+    }
+
+    .code-input:focus,
+    .code-stdin:focus {
+      outline: none;
+    }
+
+    .code-stdin {
+      min-height: 48px;
+      border-top: 1px dashed var(--line);
+      color: var(--muted);
+    }
+
+    .code-output,
+    .code-preview {
+      width: 100%;
+      border-top: 1px solid var(--line);
+    }
+
+    .code-output {
+      padding: 10px 12px;
+      font-family: "Courier New", monospace;
+      font-size: 0.88rem;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      min-height: 36px;
+      color: var(--text);
+      background: transparent;
+      border-radius: 0;
+    }
+
+    .code-preview {
+      min-height: 180px;
+      background: #ffffff;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+
+
+    .status-strip {
+      display: none;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .hide-ui .topbar,
+    .hide-ui .tools-panel,
+    .hide-ui .status-strip,
+    .hide-ui .sidebar {
+      display: none;
+    }
+
+    .hide-ui .page {
+      width: min(1180px, calc(100vw - 48px));
+      min-height: 100vh;
+      padding-top: 32px;
+    }
+
+    @media (max-width: 900px) {
+      :root {
+        --editor-width: min(100vw - 36px, 100%);
+        --ui-width: min(100vw - 20px, 100%);
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .topbar-actions {
+        justify-content: flex-start;
+      }
+
+
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        padding: 34px 0 56px;
+        font-size: 1rem;
+      }
+
+      .page p,
+      .page li,
+      .page blockquote,
+      .page td,
+      .page th {
+        font-size: 1rem;
+      }
+
+      .group {
+        width: 100%;
+      }
+    }
+
+    @media print {
+      .topbar,
+      .sidebar {
+        display: none;
+      }
+      .tools-panel,
+      .status-strip {
+        display: none;
+      }
+
+      .page {
+        width: 100%;
+        min-height: auto;
+        padding: 0;
+        box-shadow: none;
+      }
+
+      .page a {
+        color: #1a73e8;
+        text-decoration: underline;
+      }
+      .page a[href]::after {
+        content: " (" attr(href) ")";
+        font-size: 0.75em;
+        color: #666;
+        font-style: italic;
+      }
+
+      .table-head,
+      .code-head {
+        display: none;
+      }
+      .table-widget {
+        border: 1px solid #999;
+      }
+      .table-widget th,
+      .table-widget td {
+        border: 1px solid #999;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="notesPanel">
+      <div class="sidebar-head">
+        <strong>Notes</strong>
+        <div class="sidebar-actions">
+          <button class="tool" type="button" id="createNote" title="New note">+</button>
+          <button class="tool" type="button" id="closeSidebar" title="Close">&times;</button>
+        </div>
+      </div>
+      <div class="notes-list" id="notesList"></div>
+    </aside>
+    <div class="shell">
+      <header class="topbar">
+        <div class="title" id="appTitle"></div>
+        <div class="topbar-actions">
+          <button class="tool pill" type="button" id="toggleNotes" aria-expanded="false" aria-controls="notesPanel">Notes</button>
+          <button class="tool pill" type="button" id="toggleTools" aria-expanded="false" aria-controls="toolsPanel">Tools</button>
+          <button class="tool pill" type="button" id="toggleFocus" title="Focus mode">Focus</button>
+          <button class="tool pill" type="button" id="exportPdf" title="Export as PDF">PDF</button>
+          <button class="tool pill" type="button" id="saveHtml" title="Download HTML">Export</button>
+          <span class="status-dot" id="statusDot" title="Ready"></span>
+        </div>
+      </header>
+
+      <section class="tools-panel" id="toolsPanel" hidden>
+        <div class="toolbar" aria-label="Editor toolbar">
+          <select id="blockStyle" aria-label="Style">
+            <option value="P">Text</option>
+            <option value="H1">H1</option>
+            <option value="H2">H2</option>
+            <option value="H3">H3</option>
+            <option value="BLOCKQUOTE">Quote</option>
+          </select>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <button class="tool" type="button" data-command="bold" title="Bold"><b>B</b></button>
+          <button class="tool" type="button" data-command="italic" title="Italic"><i>I</i></button>
+          <button class="tool" type="button" data-command="underline" title="Underline"><u>U</u></button>
+          <button class="tool" type="button" data-command="strikeThrough" title="Strikethrough"><s>S</s></button>
+          <label class="tool-color" title="Text color"><input id="textColor" type="color" value="#111111" aria-label="Text color"></label>
+          <label class="tool-color" title="Highlight"><input id="highlightColor" type="color" value="#fff2cc" aria-label="Highlight color"></label>
+          <button class="tool" type="button" id="clearFormat" title="Clear formatting">✕</button>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <button class="tool" type="button" data-command="insertUnorderedList" title="Bullet list">•</button>
+          <button class="tool" type="button" data-command="insertOrderedList" title="Numbered list">1.</button>
+          <button class="tool" type="button" id="insertLink" title="Insert link">Link</button>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <button class="tool" type="button" data-command="undo" title="Undo">↩</button>
+          <button class="tool" type="button" data-command="redo" title="Redo">↪</button>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <input id="findText" type="text" class="find-input" placeholder="Find…" aria-label="Find">
+          <input id="replaceText" type="text" class="find-input" placeholder="Replace…" aria-label="Replace">
+          <button class="tool" type="button" id="findNext" title="Find next">↓</button>
+          <button class="tool" type="button" id="replaceAll" title="Replace all">All</button>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <button class="tool" type="button" id="saveText" title="Export TXT">TXT</button>
+          <button class="tool" type="button" id="loadDocument" title="Import file">Import</button>
+          <input id="fileInput" type="file" accept=".html,.htm,.txt" hidden>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <select id="marginPreset" aria-label="Margins" title="Page margins">
+            <option value="narrow">Narrow</option>
+            <option value="normal" selected>Normal</option>
+            <option value="wide">Wide</option>
+          </select>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <span class="tb-stats"><strong id="wordCount">0</strong> words · <span id="charCount">0</span> chars</span>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <div class="page-wrap">
+          <article id="editor" class="page" contenteditable="true" spellcheck="true">
+            <h1>Quick Note</h1>
+            <p><br></p>
+          </article>
+        </div>
+      </main>
+
+      <div class="status-strip sr-only">
+        <span id="docMeta">Unsaved local changes will be preserved automatically.</span>
+        <span id="cursorMeta">Editing</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="link-popup" id="linkPopup" hidden>
+    <input type="url" id="linkUrl" placeholder="https://" autocomplete="off" spellcheck="false">
+    <input type="text" id="linkDisplayText" placeholder="Display text (optional — blank keeps selection)">
+    <span class="link-popup-hint">Ctrl/Cmd + click a link in the doc to open it</span>
+    <div class="link-popup-row">
+      <button class="tool" type="button" id="linkConfirm" data-role="primary">Insert</button>
+      <button class="tool" type="button" id="linkRemove">Unlink</button>
+      <button class="tool" type="button" id="linkCancel">✕</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="https://unpkg.com/typo-js@1.2.4/typo.js"></script>
+  <script>
+    const app = document.getElementById("app");
+    const editor = document.getElementById("editor");
+    const saveStatus = document.getElementById("statusDot");
+    const docMeta = document.getElementById("docMeta");
+    const cursorMeta = document.getElementById("cursorMeta");
+    const wordCount = document.getElementById("wordCount");
+    const charCount = document.getElementById("charCount");
+    const readTime = document.getElementById("readTime");
+    const selectionCount = document.getElementById("selectionCount");
+    const fileInput = document.getElementById("fileInput");
+    const findText = document.getElementById("findText");
+    const replaceText = document.getElementById("replaceText");
+    const blockStyle = document.getElementById("blockStyle");
+    const textColor = document.getElementById("textColor");
+    const highlightColor = document.getElementById("highlightColor");
+    const toolsPanel = document.getElementById("toolsPanel");
+    const toggleTools = document.getElementById("toggleTools");
+    const notesPanel = document.getElementById("notesPanel");
+    const toggleNotes = document.getElementById("toggleNotes");
+    const notesList = document.getElementById("notesList");
+    const createNoteButton = document.getElementById("createNote");
+    const notesKey = "quick-note-notes";
+    const currentNoteKey = "quick-note-current-note";
+    const codeWidgetTrigger = "\\code";
+
+    katex.render("\\text{Quick}\\enspace\\text{Note}", document.getElementById("appTitle"), { throwOnError: false });
+
+    const commandButtons = [...document.querySelectorAll("[data-command]")];
+    const stateCommands = [
+      "bold",
+      "italic",
+      "underline",
+      "strikeThrough",
+      "insertUnorderedList",
+      "insertOrderedList"
+    ];
+
+    let pyodideLoader = null;
+    let pyodideRuntime = null;
+    let spellDictionary = null;
+    let spellLoader = null;
+    let autocorrectTimer = null;
+    let autocorrectSequence = 0;
+    let notes = [];
+    let currentNoteId = null;
+    const autocorrectCache = new Map();
+    const autocorrectBoundaryKeys = new Set([" ", "Enter"]);
+
+    const autocorrectOverrides = {
+      adn: "and",
+      teh: "the",
+      recieve: "receive",
+      seperate: "separate",
+      occured: "occurred",
+      untill: "until",
+      becuase: "because",
+      definately: "definitely",
+      wierd: "weird",
+      thier: "their",
+      freind: "friend"
+    };
+
+    document.execCommand("styleWithCSS", false, true);
+    document.execCommand("defaultParagraphSeparator", false, "p");
+
+    function defaultNoteContent() {
+      return "<h1>Quick Note</h1><p><br></p>";
+    }
+
+    function createNoteRecord(title = "Untitled") {
+      const noteId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `note-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      return {
+        id: noteId,
+        title,
+        content: defaultNoteContent(),
+        updatedAt: Date.now()
+      };
+    }
+
+    function persistNotes() {
+      localStorage.setItem(notesKey, JSON.stringify(notes));
+      localStorage.setItem(currentNoteKey, currentNoteId || "");
+    }
+
+    function formatNoteDate(timestamp) {
+      return new Date(timestamp).toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    }
+
+    function noteTitleFromContent(content) {
+      const parser = new DOMParser();
+      const documentNode = parser.parseFromString(content, "text/html");
+      const heading = documentNode.body.querySelector("h1, h2, h3");
+      const text = (heading ? heading.textContent : documentNode.body.textContent || "").trim();
+      return text.slice(0, 48) || "Untitled";
+    }
+
+    function currentNote() {
+      return notes.find((note) => note.id === currentNoteId) || null;
+    }
+
+    function renderNotesList() {
+      notesList.innerHTML = "";
+      notes.forEach((note) => {
+        const item = document.createElement("div");
+        item.className = "note-item";
+
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = `note-open${note.id === currentNoteId ? " active" : ""}`;
+        openButton.innerHTML = `<span class="note-title">${note.title}</span><span class="note-meta">${formatNoteDate(note.updatedAt)}</span>`;
+        openButton.addEventListener("click", () => switchNote(note.id));
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "tool note-delete";
+        deleteButton.textContent = "Del";
+        deleteButton.title = "Delete note";
+        deleteButton.addEventListener("click", () => deleteNote(note.id));
+
+        item.appendChild(openButton);
+        item.appendChild(deleteButton);
+        notesList.appendChild(item);
+      });
+    }
+
+    function initializeNotes() {
+      try {
+        notes = JSON.parse(localStorage.getItem(notesKey) || "[]");
+      } catch {
+        notes = [];
+      }
+
+      if (!Array.isArray(notes) || notes.length === 0) {
+        notes = [createNoteRecord("Quick Note")];
+      }
+
+      currentNoteId = localStorage.getItem(currentNoteKey) || notes[0].id;
+      if (!notes.some((note) => note.id === currentNoteId)) {
+        currentNoteId = notes[0].id;
+      }
+
+      renderNotesList();
+      loadCurrentNote();
+    }
+
+    function loadCurrentNote() {
+      const note = currentNote();
+      if (!note) {
+        return;
+      }
+      editor.innerHTML = note.content || defaultNoteContent();
+      hydrateRichBlocks();
+      updateMetrics();
+      updateToolbarState();
+      persistNotes();
+    }
+
+    function saveCurrentNoteContent() {
+      const note = currentNote();
+      if (!note) {
+        return;
+      }
+      note.content = serializeEditorHTML();
+      note.title = noteTitleFromContent(note.content);
+      note.updatedAt = Date.now();
+      persistNotes();
+      renderNotesList();
+    }
+
+    function switchNote(noteId) {
+      saveCurrentNoteContent();
+      currentNoteId = noteId;
+      loadCurrentNote();
+      announce("Note loaded");
+      focusEditor();
+    }
+
+    function createNote() {
+      saveCurrentNoteContent();
+      const note = createNoteRecord(`Note ${notes.length + 1}`);
+      notes.unshift(note);
+      currentNoteId = note.id;
+      renderNotesList();
+      loadCurrentNote();
+      announce("New note");
+      focusEditor();
+    }
+
+    function deleteNote(noteId) {
+      const note = notes.find((entry) => entry.id === noteId);
+      if (!note) {
+        return;
+      }
+      const confirmed = window.confirm(`Delete note \"${note.title}\"?`);
+      if (!confirmed) {
+        return;
+      }
+
+      notes = notes.filter((entry) => entry.id !== noteId);
+      if (notes.length === 0) {
+        notes = [createNoteRecord("Quick Note")];
+      }
+      if (currentNoteId === noteId) {
+        currentNoteId = notes[0].id;
+      }
+      renderNotesList();
+      loadCurrentNote();
+      announce("Note deleted");
+    }
+
+    function focusEditor() {
+      editor.focus({ preventScroll: true });
+    }
+
+    function runCommand(command, value = null) {
+      focusEditor();
+      document.execCommand(command, false, value);
+      updateToolbarState();
+      updateMetrics();
+      queueSave();
+    }
+
+    function applyHighlight(color) {
+      focusEditor();
+      document.execCommand("styleWithCSS", false, true);
+      const normalized = color === "transparent" ? "#ffffff" : color;
+      const applied = document.execCommand("hiliteColor", false, normalized);
+      if (!applied) {
+        document.execCommand("backColor", false, normalized);
+      }
+      updateToolbarState();
+      updateMetrics();
+      queueSave();
+    }
+
+    function queueSave() {
+      saveStatus.className = "status-dot saving";
+      saveStatus.title = "Saving";
+      clearTimeout(queueSave.timer);
+      queueSave.timer = window.setTimeout(saveDocument, 250);
+    }
+
+    async function loadSpellDictionary() {
+      if (spellDictionary) {
+        return spellDictionary;
+      }
+      if (spellLoader) {
+        return spellLoader;
+      }
+
+      spellLoader = (async () => {
+        if (!window.Typo) {
+          return null;
+        }
+
+        const [affResponse, dicResponse] = await Promise.all([
+          fetch("https://cdn.jsdelivr.net/npm/dictionary-en-us/index.aff"),
+          fetch("https://cdn.jsdelivr.net/npm/dictionary-en-us/index.dic")
+        ]);
+
+        const [affData, dicData] = await Promise.all([
+          affResponse.text(),
+          dicResponse.text()
+        ]);
+
+        spellDictionary = new window.Typo("en_US", affData, dicData, { platform: "any" });
+        return spellDictionary;
+      })().catch(() => null);
+
+      return spellLoader;
+    }
+
+    function serializeEditorHTML() {
+      const clone = editor.cloneNode(true);
+      clone.querySelectorAll(".code-runner").forEach((widget) => {
+        const codeInput = widget.querySelector(".code-input");
+        const stdinInput = widget.querySelector(".code-stdin");
+        if (codeInput) {
+          widget.dataset.code = codeInput.value;
+          codeInput.textContent = codeInput.value;
+        }
+        if (stdinInput) {
+          widget.dataset.stdin = stdinInput.value;
+          stdinInput.textContent = stdinInput.value;
+        }
+      });
+      return clone.innerHTML;
+    }
+
+    function saveDocument() {
+      saveCurrentNoteContent();
+      const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      saveStatus.className = "status-dot";
+      saveStatus.title = "Saved";
+      docMeta.textContent = `Last autosave at ${timestamp}.`;
+    }
+
+    function loadSavedDocument() {
+      initializeNotes();
+      saveStatus.className = "status-dot";
+      saveStatus.title = "Restored";
+    }
+
+    function hydrateRichBlocks() {
+      editor.querySelectorAll(".math-inline, .math-block").forEach((node) => renderMathWidget(node, false));
+      editor.querySelectorAll(".code-runner").forEach((node) => hydrateCodeRunner(node));
+      editor.querySelectorAll(".table-widget").forEach((node) => hydrateTableWidget(node));
+    }
+
+    function getPlainText() {
+      return editor.innerText.replace(/\u00a0/g, " ").trim();
+    }
+
+    function updateMetrics() {
+      const text = getPlainText();
+      const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+      const characters = text.length;
+      document.getElementById("wordCount").textContent = words;
+      document.getElementById("charCount").textContent = characters;
+    }
+
+    function updateToolbarState() {
+      stateCommands.forEach((command) => {
+        const button = document.querySelector(`[data-command="${command}"]`);
+        if (!button) {
+          return;
+        }
+
+        let active = false;
+        try {
+          active = document.queryCommandState(command);
+        } catch {
+          active = false;
+        }
+        button.classList.toggle("active", active);
+      });
+
+      try {
+        const currentBlock = document.queryCommandValue("formatBlock").replace(/[<>]/g, "").toUpperCase();
+        if (currentBlock) {
+          blockStyle.value = currentBlock;
+        }
+      } catch {
+        blockStyle.value = "P";
+      }
+    }
+
+    function sanitizeFileName(name) {
+      return (name || "quick-note")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "quick-note";
+    }
+
+    function currentTitle() {
+      const firstHeading = editor.querySelector("h1, h2, h3");
+      return sanitizeFileName(firstHeading ? firstHeading.textContent : "quick-note");
+    }
+
+    function downloadFile(content, extension, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${currentTitle()}.${extension}`;
+      link.click();
+      URL.revokeObjectURL(url);
+      saveStatus.className = "status-dot";
+      saveStatus.title = `Exported ${extension.toUpperCase()}`;
+    }
+
+    function createTableMarkup(rows, cols) {
+      const bodyRows = Array.from({ length: rows }, (_, rowIndex) => {
+        const tag = rowIndex === 0 ? "th" : "td";
+        const cells = Array.from({ length: cols }, (_, colIndex) => `<${tag}>${rowIndex === 0 ? `Header ${colIndex + 1}` : `Cell ${rowIndex}.${colIndex + 1}`}</${tag}>`).join("");
+        return `<tr>${cells}</tr>`;
+      }).join("");
+      return `<table><tbody>${bodyRows}</tbody></table><p></p>`;
+    }
+
+    // ── Interactive Table Widget ──────────────────────────────────────────
+    function createTableWidget(rows = 3, cols = 3) {
+      const container = document.createElement("div");
+      container.className = "table-widget";
+      container.contentEditable = "false";
+
+      const head = document.createElement("div");
+      head.className = "table-head";
+      head.innerHTML = `<span>Table</span>
+        <div class="table-actions">
+          <button class="tool tw-add-col" type="button" title="Add column">+Col</button>
+          <button class="tool tw-add-row" type="button" title="Add row">+Row</button>
+          <button class="tool tw-del-col" type="button" title="Delete last column">\u2212Col</button>
+          <button class="tool tw-del-row" type="button" title="Delete last row">\u2212Row</button>
+          <button class="tool tw-remove" type="button" title="Remove table">\u2715</button>
+        </div>`;
+      container.appendChild(head);
+
+      const table = document.createElement("table");
+      const tbody = document.createElement("tbody");
+      for (let r = 0; r < rows; r++) {
+        const tr = document.createElement("tr");
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement(r === 0 ? "th" : "td");
+          cell.contentEditable = "true";
+          cell.textContent = r === 0 ? `Col ${c + 1}` : "";
+          tr.appendChild(cell);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      container.appendChild(table);
+
+      // After a short delay, add the trailing paragraph for continued editing
+      const trailing = document.createElement("p");
+      trailing.innerHTML = "<br>";
+
+      hydrateTableWidget(container);
+      return { widget: container, trailing };
+    }
+
+    function hydrateTableWidget(container) {
+      if (container.dataset.hydrated === "true") return;
+      container.dataset.hydrated = "true";
+
+      const getTable = () => container.querySelector("table");
+      const getTbody = () => container.querySelector("tbody");
+
+      container.querySelector(".tw-add-col").addEventListener("click", () => {
+        const tbody = getTbody();
+        if (!tbody) return;
+        tbody.querySelectorAll("tr").forEach((tr, ri) => {
+          const cell = document.createElement(ri === 0 ? "th" : "td");
+          cell.contentEditable = "true";
+          cell.textContent = ri === 0 ? `Col ${tr.children.length + 1}` : "";
+          tr.appendChild(cell);
+        });
+        queueSave();
+      });
+
+      container.querySelector(".tw-add-row").addEventListener("click", () => {
+        const tbody = getTbody();
+        if (!tbody) return;
+        const colCount = tbody.rows[0] ? tbody.rows[0].cells.length : 3;
+        const tr = document.createElement("tr");
+        for (let c = 0; c < colCount; c++) {
+          const td = document.createElement("td");
+          td.contentEditable = "true";
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+        tr.cells[0].focus();
+        queueSave();
+      });
+
+      container.querySelector(".tw-del-col").addEventListener("click", () => {
+        const tbody = getTbody();
+        if (!tbody) return;
+        const cols = tbody.rows[0] ? tbody.rows[0].cells.length : 0;
+        if (cols <= 1) return;
+        tbody.querySelectorAll("tr").forEach(tr => {
+          if (tr.lastElementChild) tr.lastElementChild.remove();
+        });
+        queueSave();
+      });
+
+      container.querySelector(".tw-del-row").addEventListener("click", () => {
+        const tbody = getTbody();
+        if (!tbody || tbody.rows.length <= 1) return;
+        tbody.lastElementChild.remove();
+        queueSave();
+      });
+
+      container.querySelector(".tw-remove").addEventListener("click", () => {
+        container.nextElementSibling; // trailing <p>
+        container.remove();
+        focusEditor();
+        queueSave();
+      });
+
+      // Tab between cells
+      container.addEventListener("keydown", e => {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const cell = e.target.closest("td, th");
+          if (!cell) return;
+          const allCells = [...container.querySelectorAll("td, th")];
+          const idx = allCells.indexOf(cell);
+          const next = allCells[e.shiftKey ? idx - 1 : idx + 1];
+          if (next) { next.focus(); selectAllInNode(next); }
+        }
+      });
+    }
+
+    function selectAllInNode(node) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    // ── Typst → LaTeX preprocessor ─────────────────────────────────────
+    // Converts common Typst-style math shorthands to LaTeX before KaTeX rendering.
+    function typstToLatex(input) {
+      let s = input;
+
+      // Function-call syntax: name(args) → \name{args}
+      // Must handle nested parens and multiple comma-separated args
+
+      // frac(a, b) → \frac{a}{b}
+      s = s.replace(/\bfrac\(([^,]+),\s*([^)]+)\)/g, "\\frac{$1}{$2}");
+
+      // sqrt(x) → \sqrt{x}
+      s = s.replace(/\bsqrt\(([^)]+)\)/g, "\\sqrt{$1}");
+
+      // root(n, x) → \sqrt[n]{x}
+      s = s.replace(/\broot\(([^,]+),\s*([^)]+)\)/g, "\\sqrt[$1]{$2}");
+
+      // binom(n, k) → \binom{n}{k}
+      s = s.replace(/\bbinom\(([^,]+),\s*([^)]+)\)/g, "\\binom{$1}{$2}");
+
+      // mat(...; ...) → \begin{pmatrix}...\end{pmatrix}
+      s = s.replace(/\bmat\(([^)]+)\)/g, (_, body) => {
+        const rows = body.split(";").map(row =>
+          row.trim().split(",").map(c => c.trim()).join(" & ")
+        ).join(" \\\\ ");
+        return `\\begin{pmatrix} ${rows} \\end{pmatrix}`;
+      });
+
+      // vec(a, b, c) → column vector
+      s = s.replace(/\bvec\(([^)]+)\)/g, (_, body) => {
+        if (body.includes(",")) {
+          const entries = body.split(",").map(c => c.trim()).join(" \\\\ ");
+          return `\\begin{pmatrix} ${entries} \\end{pmatrix}`;
+        }
+        return `\\vec{${body.trim()}}`;
+      });
+
+      // cases(expr1 "if" cond1, expr2 "if" cond2) → \begin{cases}...\end{cases}
+      s = s.replace(/\bcases\(([^)]+)\)/g, (_, body) => {
+        const rows = body.split(",").map(row => row.trim()).join(" \\\\ ");
+        return `\\begin{cases} ${rows} \\end{cases}`;
+      });
+
+      // cancel(x) → \cancel{x}
+      s = s.replace(/\bcancel\(([^)]+)\)/g, "\\cancel{$1}");
+
+      // abs(x) → \left|x\right|
+      s = s.replace(/\babs\(([^)]+)\)/g, "\\left|$1\\right|");
+
+      // norm(x) → \left\|x\right\|
+      s = s.replace(/\bnorm\(([^)]+)\)/g, "\\left\\|$1\\right\\|");
+
+      // floor(x) → \left\lfloor x\right\rfloor
+      s = s.replace(/\bfloor\(([^)]+)\)/g, "\\left\\lfloor $1\\right\\rfloor");
+
+      // ceil(x) → \left\lceil x\right\rceil
+      s = s.replace(/\bceil\(([^)]+)\)/g, "\\left\\lceil $1\\right\\rceil");
+
+      // Style variants
+      s = s.replace(/\bbold\(([^)]+)\)/g, "\\mathbf{$1}");
+      s = s.replace(/\bitalic\(([^)]+)\)/g, "\\mathit{$1}");
+      s = s.replace(/\bupright\(([^)]+)\)/g, "\\mathrm{$1}");
+      s = s.replace(/\bcal\(([^)]+)\)/g, "\\mathcal{$1}");
+      s = s.replace(/\bbb\(([^)]+)\)/g, "\\mathbb{$1}");
+      s = s.replace(/\bfrak\(([^)]+)\)/g, "\\mathfrak{$1}");
+      s = s.replace(/\bmono\(([^)]+)\)/g, "\\mathtt{$1}");
+      s = s.replace(/\bsans\(([^)]+)\)/g, "\\mathsf{$1}");
+      s = s.replace(/\bserif\(([^)]+)\)/g, "\\mathrm{$1}");
+
+      // Accents
+      s = s.replace(/\bhat\(([^)]+)\)/g, "\\hat{$1}");
+      s = s.replace(/\btilde\(([^)]+)\)/g, "\\tilde{$1}");
+      s = s.replace(/\bdot\(([^)]+)\)/g, "\\dot{$1}");
+      s = s.replace(/\bddot\(([^)]+)\)/g, "\\ddot{$1}");
+      s = s.replace(/\bbar\(([^)]+)\)/g, "\\bar{$1}");
+      s = s.replace(/\bacute\(([^)]+)\)/g, "\\acute{$1}");
+      s = s.replace(/\bgrave\(([^)]+)\)/g, "\\grave{$1}");
+      s = s.replace(/\bbreve\(([^)]+)\)/g, "\\breve{$1}");
+
+      // Over/under
+      s = s.replace(/\boverbrace\(([^,]+),\s*([^)]+)\)/g, "\\overbrace{$1}^{$2}");
+      s = s.replace(/\bunderbrace\(([^,]+),\s*([^)]+)\)/g, "\\underbrace{$1}_{$2}");
+      s = s.replace(/\boverline\(([^)]+)\)/g, "\\overline{$1}");
+      s = s.replace(/\bunderline\(([^)]+)\)/g, "\\underline{$1}");
+
+      // op("name") → \operatorname{name}
+      s = s.replace(/\bop\("([^"]+)"\)/g, "\\operatorname{$1}");
+
+      // Typst Greek (bare words) → LaTeX \commands — only common ones
+      const greekMap = [
+        "alpha","beta","gamma","delta","epsilon","zeta","eta","theta","iota",
+        "kappa","lambda","mu","nu","xi","pi","rho","sigma","tau","upsilon",
+        "phi","chi","psi","omega",
+        "Gamma","Delta","Theta","Lambda","Xi","Pi","Sigma","Upsilon","Phi","Psi","Omega"
+      ];
+      for (const g of greekMap) {
+        s = s.replace(new RegExp(`(?<!\\\\)\\b${g}\\b`, "g"), `\\${g}`);
+      }
+
+      // Common symbol names
+      const symbolMap = {
+        "infinity": "\\infty", "partial": "\\partial", "nabla": "\\nabla",
+        "forall": "\\forall", "exists": "\\exists", "emptyset": "\\emptyset",
+        "approx": "\\approx", "equiv": "\\equiv", "prop": "\\propto",
+        "arrow.r": "\\rightarrow", "arrow.l": "\\leftarrow",
+        "arrow.r.double": "\\Rightarrow", "arrow.l.double": "\\Leftarrow",
+        "arrow.l.r": "\\leftrightarrow", "arrow.r.long": "\\longrightarrow",
+        "arrow.r.bar": "\\mapsto",
+        "times": "\\times", "div": "\\div",
+        "plus.minus": "\\pm", "minus.plus": "\\mp",
+        "dots": "\\dots", "dots.h": "\\cdots", "dots.v": "\\vdots", "dots.down": "\\ddots",
+        "star.op": "\\star",
+        "circle.plus": "\\oplus", "circle.times": "\\otimes",
+        "union": "\\cup", "sect": "\\cap",
+        "subset": "\\subset", "supset": "\\supset",
+        "subset.eq": "\\subseteq", "supset.eq": "\\supseteq",
+        "in.not": "\\notin",
+        "tack.r": "\\vdash", "models": "\\models",
+        "ell": "\\ell", "aleph": "\\aleph", "dagger": "\\dagger",
+        "integral": "\\int", "integral.double": "\\iint", "integral.triple": "\\iiint",
+        "integral.cont": "\\oint",
+        "sum": "\\sum", "product": "\\prod",
+      };
+      for (const [k, v] of Object.entries(symbolMap)) {
+        // Escape dots for regex
+        const escaped = k.replace(/\./g, "\\.");
+        s = s.replace(new RegExp(`(?<!\\\\)\\b${escaped}\\b`, "g"), v);
+      }
+
+      return s;
+    }
+
+    // Math shortcut triggers: type $\trigger$ to insert a pre-filled math template
+    const mathTemplates = {
+      "\\\\table": null, // handled specially (table widget)
+      "\\\\matrix": "\\begin{pmatrix}  &  \\\\  &  \\end{pmatrix}",
+      "\\\\bmatrix": "\\begin{bmatrix}  &  \\\\  &  \\end{bmatrix}",
+      "\\\\vmatrix": "\\begin{vmatrix}  &  \\\\  &  \\end{vmatrix}",
+      "\\\\cases": "\\begin{cases}  & \\text{if }  \\\\  & \\text{otherwise} \\end{cases}",
+      "\\\\align": "\\begin{aligned}  &=  \\\\  &=  \\end{aligned}",
+      "\\\\sum": "\\sum_{i=0}^{n} ",
+      "\\\\prod": "\\prod_{i=1}^{n} ",
+      "\\\\int": "\\int_{a}^{b}  \\, dx",
+      "\\\\iint": "\\iint_{D}  \\, dA",
+      "\\\\lim": "\\lim_{x \\to \\infty} ",
+      "\\\\frac": "\\frac{}{}",
+      "\\\\binom": "\\binom{n}{k}",
+      "\\\\sqrt": "\\sqrt{}",
+    };
+
+    function insertHtml(html) {
+      focusEditor();
+      document.execCommand("insertHTML", false, html);
+      hydrateRichBlocks();
+      updateMetrics();
+      queueSave();
+    }
+
+    function replaceAllText(findValue, replaceValue) {
+      if (!findValue) {
+        return 0;
+      }
+
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+      let replaced = 0;
+
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.nodeValue.includes(findValue)) {
+          continue;
+        }
+        const matches = node.nodeValue.split(findValue).length - 1;
+        node.nodeValue = node.nodeValue.split(findValue).join(replaceValue);
+        replaced += matches;
+      }
+
+      return replaced;
+    }
+
+    function announce(message) {
+      saveStatus.title = message;
+    }
+
+    function runWhenIdle(callback, timeout = 300) {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(callback, { timeout });
+        return;
+      }
+      window.setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 0 }), timeout);
+    }
+
+    function cancelScheduledAutocorrect() {
+      autocorrectSequence += 1;
+      if (autocorrectTimer) {
+        window.clearTimeout(autocorrectTimer);
+        autocorrectTimer = null;
+      }
+    }
+
+    function scheduleAutocorrect() {
+      const requestId = ++autocorrectSequence;
+      if (autocorrectTimer) {
+        window.clearTimeout(autocorrectTimer);
+      }
+
+      autocorrectTimer = window.setTimeout(() => {
+        autocorrectTimer = null;
+        runWhenIdle(() => {
+          autocorrectLastWord(requestId);
+        }, 450);
+      }, 180);
+    }
+
+    function getEditingContainer(node) {
+      let current = node;
+      while (current && current !== editor) {
+        if (current.nodeType === Node.ELEMENT_NODE) {
+          if (current.classList.contains("code-runner") || current.classList.contains("math-inline") || current.classList.contains("math-block") || current.classList.contains("table-widget") || current.nodeName === "PRE") {
+            return current;
+          }
+        }
+        current = current.parentNode;
+      }
+      return null;
+    }
+
+    function extractWordBeforeCursor() {
+      const range = getActiveRange();
+      if (!range || !range.collapsed) {
+        return null;
+      }
+
+      let node = range.startContainer;
+      let offset = range.startOffset;
+
+      if (node.nodeType !== Node.TEXT_NODE) {
+        if (offset > 0) {
+          const prior = node.childNodes[offset - 1];
+          if (prior && prior.nodeType === Node.TEXT_NODE) {
+            node = prior;
+            offset = prior.nodeValue.length;
+          } else {
+            return null;
+          }
+        } else {
+          return null;
+        }
+      }
+
+      if (getEditingContainer(node.parentNode)) {
+        return null;
+      }
+
+      const textBefore = node.nodeValue.slice(0, offset);
+      const cursorContext = textBefore.match(/([A-Za-z][A-Za-z'’-]{2,})(?=[\s.,!?;:]?$)/);
+      if (!cursorContext) {
+        return null;
+      }
+
+      const word = cursorContext[1];
+      const start = textBefore.lastIndexOf(word);
+      const block = getCurrentBlock(node.parentNode);
+      const blockPrefix = block ? block.textContent.slice(0, block.textContent.lastIndexOf(word) + word.length) : "";
+      const dollarCount = (blockPrefix.match(/\$/g) || []).length;
+
+      if (dollarCount % 2 === 1 || autocorrectOverrides[word.toLowerCase()] === word || word.startsWith("\\")) {
+        return null;
+      }
+
+      return { node, word, start, end: start + word.length };
+    }
+
+    function preserveCase(source, replacement) {
+      if (source === source.toUpperCase()) {
+        return replacement.toUpperCase();
+      }
+      if (source[0] === source[0].toUpperCase() && source.slice(1) === source.slice(1).toLowerCase()) {
+        return replacement[0].toUpperCase() + replacement.slice(1);
+      }
+      return replacement;
+    }
+
+    async function autocorrectLastWord(requestId = autocorrectSequence) {
+      const context = extractWordBeforeCursor();
+      if (!context || requestId !== autocorrectSequence) {
+        return;
+      }
+
+      const originalWord = context.word;
+      const normalizedWord = originalWord.toLowerCase();
+      let replacement = autocorrectOverrides[normalizedWord] || null;
+
+      if (!replacement) {
+        const cachedSuggestion = autocorrectCache.get(normalizedWord);
+        if (cachedSuggestion === false) {
+          return;
+        }
+        if (typeof cachedSuggestion === "string") {
+          replacement = cachedSuggestion;
+        }
+      }
+
+      if (!replacement) {
+        const dictionary = await loadSpellDictionary();
+        if (!dictionary || requestId !== autocorrectSequence) {
+          return;
+        }
+
+        if (dictionary.check(originalWord) || dictionary.check(normalizedWord)) {
+          autocorrectCache.set(normalizedWord, false);
+          return;
+        }
+
+        const suggestions = dictionary.suggest(normalizedWord, 3);
+        if (!suggestions || suggestions.length === 0) {
+          autocorrectCache.set(normalizedWord, false);
+          return;
+        }
+
+        replacement = suggestions[0];
+        autocorrectCache.set(normalizedWord, replacement || false);
+      }
+
+      if (!replacement || replacement.toLowerCase() === normalizedWord) {
+        return;
+      }
+
+      const latestContext = extractWordBeforeCursor();
+      if (!latestContext || requestId !== autocorrectSequence) {
+        return;
+      }
+      if (latestContext.node !== context.node || latestContext.start !== context.start || latestContext.word !== originalWord) {
+        return;
+      }
+
+      const corrected = preserveCase(originalWord, replacement);
+      latestContext.node.nodeValue = `${latestContext.node.nodeValue.slice(0, latestContext.start)}${corrected}${latestContext.node.nodeValue.slice(latestContext.end)}`;
+
+      const selection = window.getSelection();
+      const range = document.createRange();
+      const nextOffset = latestContext.start + corrected.length + 1;
+      range.setStart(latestContext.node, Math.min(nextOffset, latestContext.node.nodeValue.length));
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      updateMetrics();
+      queueSave();
+    }
+
+    function getActiveRange() {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        return null;
+      }
+      return selection.getRangeAt(0);
+    }
+
+    function placeCaretAfter(node) {
+      const range = document.createRange();
+      range.setStartAfter(node);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      focusEditor();
+    }
+
+    function replaceTextInNode(node, start, end, replacementNode) {
+      const text = node.nodeValue;
+      const before = text.slice(0, start);
+      const after = text.slice(end);
+      const fragment = document.createDocumentFragment();
+
+      if (before) {
+        fragment.appendChild(document.createTextNode(before));
+      }
+
+      fragment.appendChild(replacementNode);
+
+      if (after) {
+        fragment.appendChild(document.createTextNode(after));
+      }
+
+      const parent = node.parentNode;
+      parent.replaceChild(fragment, node);
+      placeCaretAfter(replacementNode);
+      queueSave();
+      updateMetrics();
+    }
+
+    function renderMathWidget(widget, shouldQueueSave = true) {
+      const source = widget.dataset.latex || "";
+      widget.innerHTML = "";
+      const renderHost = document.createElement("span");
+      renderHost.className = "math-render";
+      const sourceNode = document.createElement("span");
+      sourceNode.className = "math-source";
+      sourceNode.textContent = source;
+      widget.appendChild(renderHost);
+      widget.appendChild(sourceNode);
+
+      if (window.katex) {
+        try {
+          window.katex.render(typstToLatex(source), renderHost, {
+            throwOnError: true,
+            displayMode: widget.classList.contains("math-block")
+          });
+        } catch (error) {
+          renderHost.innerHTML = `<span class="math-error">${error.message}</span>`;
+        }
+      } else {
+        renderHost.textContent = source;
+      }
+
+      widget.contentEditable = "false";
+      widget.title = "Click to edit";
+      if (!widget.dataset.bound) {
+        widget.addEventListener("click", (e) => {
+          if (widget.classList.contains("math-editing")) return;
+          e.stopPropagation();
+          widget.classList.add("math-editing");
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "math-editor";
+          input.value = widget.dataset.latex || "";
+          // Size input to content
+          input.style.width = Math.max(60, input.value.length * 9 + 20) + "px";
+          input.addEventListener("input", () => {
+            input.style.width = Math.max(60, input.value.length * 9 + 20) + "px";
+          });
+
+          widget.innerHTML = "";
+          widget.appendChild(input);
+          input.focus();
+          input.select();
+
+          const commit = () => {
+            const val = input.value.trim();
+            widget.dataset.latex = val || widget.dataset.latex || "";
+            widget.classList.remove("math-editing");
+            renderMathWidget(widget);
+          };
+
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+            if (ev.key === "Escape") { widget.classList.remove("math-editing"); renderMathWidget(widget); }
+            ev.stopPropagation();
+          });
+          input.addEventListener("blur", commit, { once: true });
+        });
+        widget.dataset.bound = "true";
+      }
+
+      if (shouldQueueSave) {
+        queueSave();
+      }
+    }
+
+    function createMathWidget(latex, displayMode) {
+      const widget = document.createElement(displayMode ? "div" : "span");
+      widget.className = displayMode ? "math-block" : "math-inline";
+      widget.dataset.latex = latex;
+      renderMathWidget(widget, false);
+      return widget;
+    }
+
+
+    function getCurrentBlock(node) {
+      let current = node;
+      while (current && current !== editor) {
+        if (["P", "DIV", "LI", "BLOCKQUOTE"].includes(current.nodeName)) {
+          return current;
+        }
+        current = current.parentNode;
+      }
+      return null;
+    }
+
+    function replaceNode(target, replacement) {
+      target.parentNode.replaceChild(replacement, target);
+      placeCaretAfter(replacement);
+      hydrateRichBlocks();
+      queueSave();
+      updateMetrics();
+    }
+
+    // Returns an existing or newly created fixed math preview element.
+    function getMathPreviewEl() {
+      if (!getMathPreviewEl._el) {
+        const el = document.createElement("div");
+        el.className = "math-preview";
+        el.hidden = true;
+        document.body.appendChild(el);
+        getMathPreviewEl._el = el;
+      }
+      return getMathPreviewEl._el;
+    }
+
+    function hideMathPreview() {
+      getMathPreviewEl().hidden = true;
+    }
+
+    // Renders a live KaTeX preview tooltip while the user is inside $...$ or $$...$$.
+    function updateMathPreview() {
+      const preview = getMathPreviewEl();
+      const range = getActiveRange();
+      if (!range || !range.collapsed || range.startContainer.nodeType !== Node.TEXT_NODE) {
+        preview.hidden = true;
+        return;
+      }
+      const textBefore = range.startContainer.nodeValue.slice(0, range.startOffset);
+      const displayOpen = textBefore.match(/\$\$([\s\S]*)$/);
+      const inlineOpen = !displayOpen && textBefore.match(/(?<!\$)\$([^$\n]*)$/);
+      const partial = displayOpen ? displayOpen[1] : (inlineOpen ? inlineOpen[1] : null);
+      if (partial === null) {
+        preview.hidden = true;
+        return;
+      }
+      const cursorRect = range.getBoundingClientRect();
+      preview.style.left = Math.max(8, cursorRect.left) + "px";
+      preview.style.top = (cursorRect.bottom + 8) + "px";
+      preview.hidden = false;
+      if (window.katex) {
+        try {
+          window.katex.render(typstToLatex(partial.trim()) || "\\square", preview, {
+            throwOnError: false,
+            displayMode: !!displayOpen
+          });
+        } catch {
+          preview.textContent = partial || "…";
+        }
+      } else {
+        preview.textContent = partial || "…";
+      }
+    }
+
+    // Detects when the user has just closed $...$ or $$...$$ by typing the closing $ and renders it.
+    function checkAndRenderMath() {
+      const range = getActiveRange();
+      if (!range || !range.collapsed) {
+        return;
+      }
+      const node = range.startContainer;
+      if (node.nodeType !== Node.TEXT_NODE) {
+        return;
+      }
+      const offset = range.startOffset;
+      const textBefore = node.nodeValue.slice(0, offset);
+
+      // Check for template triggers first ($\trigger$)
+      const triggerMatch = textBefore.match(/\$(\\\w+)\$$/);
+      if (triggerMatch) {
+        const trigger = triggerMatch[1];
+        // Escape backslash for lookup in mathTemplates
+        const key = trigger.replace(/\\/g, "\\\\");
+        if (key in mathTemplates) {
+          const block = getCurrentBlock(node.parentNode);
+          const start = textBefore.length - triggerMatch[0].length;
+
+          if (trigger === "\\table") {
+            // Insert an interactive table widget
+            const { widget, trailing } = createTableWidget(3, 3);
+            if (block && block.textContent.trim() === triggerMatch[0]) {
+              block.parentNode.insertBefore(trailing, block.nextSibling);
+              replaceNode(block, widget);
+            } else {
+              replaceTextInNode(node, start, offset, widget);
+              widget.parentNode.insertBefore(trailing, widget.nextSibling);
+            }
+            hideMathPreview();
+            queueSave();
+            return;
+          }
+
+          const template = mathTemplates[key];
+          if (template) {
+            // Insert a math widget pre-filled with the template
+            const displayMode = block && block.textContent.trim() === triggerMatch[0];
+            const mathWidget = createMathWidget(template, displayMode);
+            if (displayMode) {
+              replaceNode(block, mathWidget);
+            } else {
+              replaceTextInNode(node, start, offset, mathWidget);
+            }
+            hideMathPreview();
+            // Auto-open editor
+            setTimeout(() => mathWidget.click(), 50);
+            return;
+          }
+        }
+      }
+
+      // Closed $$...$$
+      const displayMatch = textBefore.match(/\$\$([^]+?)\$\$$/);
+      if (displayMatch && displayMatch[1].trim()) {
+        const latex = displayMatch[1].trim();
+        const block = getCurrentBlock(node.parentNode);
+        if (block && block.textContent.trim() === `$$${displayMatch[1]}$$`) {
+          replaceNode(block, createMathWidget(latex, true));
+        } else {
+          const start = textBefore.length - displayMatch[0].length;
+          replaceTextInNode(node, start, offset, createMathWidget(latex, true));
+        }
+        hideMathPreview();
+        return;
+      }
+
+      // Closed $...$
+      const inlineMatch = textBefore.match(/(?<!\$)\$([^$\n]+)\$$/);
+      if (inlineMatch && inlineMatch[1].trim()) {
+        const latex = inlineMatch[1].trim();
+        const start = textBefore.length - inlineMatch[0].length;
+        replaceTextInNode(node, start, offset, createMathWidget(latex, false));
+        hideMathPreview();
+      }
+    }
+
+    function createRunnerMarkup() {
+      return `
+        <div class="code-runner" contenteditable="false" data-language="" data-code="" data-stdin="">
+          <div class="code-head">
+            <span class="code-lang-badge">auto</span>
+            <div class="code-actions">
+              <button class="tool code-run" type="button">▶ Run</button>
+              <button class="tool code-stdin-btn" type="button" title="Toggle stdin">stdin</button>
+              <button class="tool code-remove" type="button">✕</button>
+            </div>
+          </div>
+          <textarea class="code-input" spellcheck="false" autocorrect="off" autocomplete="off" placeholder="Write code…"></textarea>
+          <textarea class="code-stdin hidden" spellcheck="false" autocorrect="off" autocomplete="off" placeholder="stdin…"></textarea>
+          <div class="code-output">Ready.</div>
+          <iframe class="code-preview hidden" sandbox="allow-scripts"></iframe>
+        </div>
+      `;
+    }
+
+    function createCodeRunner() {
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = createRunnerMarkup().trim();
+      const node = wrapper.firstElementChild;
+      hydrateCodeRunner(node);
+      return node;
+    }
+
+    function detectLanguage(code) {
+      const t = code.trim();
+      if (!t) return "python";
+      if (/<!doctype html>|<html|<body|<div|<span|<script|<style/i.test(t)) return "html";
+      if (/^\s*[{[]/.test(t)) { try { JSON.parse(t); return "json"; } catch {} }
+      if (/\b(def |import |from |print\(|elif |lambda |async def |class )/.test(t) || /^\s*(#|import |from )/.test(t)) return "python";
+      if (/^\s*#include|\bint main\s*\(/.test(t)) return t.includes("cout") || t.includes("class ") ? "cpp" : "c";
+      if (/^\s*(public class |import java\.)/.test(t)) return "java";
+      if (/^\s*fn main|\buse std::|\blet mut\b/.test(t)) return "rust";
+      if (/^\s*package main|\bfunc main\(/.test(t)) return "go";
+      if (/\b(require|puts|def |end$|p )/m.test(t)) return "ruby";
+      if (/^\s*(#!\/bin\/bash|#!\/bin\/sh|^echo |^ls |^cd )/m.test(t)) return "bash";
+      if (/\b(function|const|let|var|=>|console\.log|document\.)/. test(t)) return "javascript";
+      return "python";
+    }
+
+    function ensurePyodide() {
+      if (pyodideRuntime) return Promise.resolve(pyodideRuntime);
+      if (pyodideLoader) return pyodideLoader;
+      pyodideLoader = new Promise((resolve, reject) => {
+        const finish = async () => {
+          try {
+            const py = await window.loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/" });
+            // Pre-install rich and micropip for color boxes + auto-install support
+            await py.runPythonAsync(`
+import micropip
+await micropip.install(["rich", "numpy", "matplotlib", "sympy"])
+`);
+            pyodideRuntime = py;
+            resolve(py);
+          } catch (err) { reject(err); }
+        };
+        if (window.loadPyodide) { finish(); return; }
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js";
+        script.onload = finish;
+        script.onerror = () => reject(new Error("Failed to load Python runtime"));
+        document.head.appendChild(script);
+      });
+      return pyodideLoader;
+    }
+
+    async function runPython(code, stdin) {
+      const pyodide = await ensurePyodide();
+      try { await pyodide.loadPackagesFromImports(code); } catch {}
+      pyodide.globals.set("user_code", code);
+      pyodide.globals.set("user_stdin", stdin || "");
+      return JSON.parse(await pyodide.runPythonAsync(`
+import io, traceback, contextlib, builtins, json, base64
+buffer = io.StringIO()
+figures = []
+stdin_it = iter(user_stdin.splitlines())
+_orig_input = builtins.input
+builtins.input = lambda _p="": next(stdin_it, "")
+try:
+    import matplotlib; matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    def _show(*a, **k):
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", bbox_inches="tight", dpi=120)
+        buf.seek(0); figures.append(base64.b64encode(buf.read()).decode())
+        plt.clf(); plt.close()
+    plt.show = _show
+except Exception: pass
+scope = {}
+try:
+    with contextlib.redirect_stdout(buffer):
+        exec(user_code, scope)
+except ModuleNotFoundError as _me:
+    _mod = str(_me).split("'")[1] if "'" in str(_me) else ""
+    if _mod:
+        import micropip
+        await micropip.install([_mod])
+        try:
+            with contextlib.redirect_stdout(buffer):
+                exec(user_code, scope)
+        except Exception: buffer.write(traceback.format_exc())
+    else: buffer.write(traceback.format_exc())
+except Exception: buffer.write(traceback.format_exc())
+builtins.input = _orig_input
+try:
+    import matplotlib.pyplot as _plt
+    if _plt.get_fignums():
+        buf = io.BytesIO(); _plt.savefig(buf, format="png", bbox_inches="tight", dpi=120)
+        buf.seek(0); figures.append(base64.b64encode(buf.read()).decode())
+        _plt.clf(); _plt.close("all")
+except Exception: pass
+json.dumps({"text": buffer.getvalue(), "images": figures})
+`));
+    }
+
+    function runJavaScript(code, widget) {
+      const iframe = widget.querySelector(".code-preview");
+      const output = widget.querySelector(".code-output");
+      iframe.classList.add("hidden");
+      output.classList.remove("hidden");
+      const frameHtml = `<!DOCTYPE html><html><body><script>
+const send = (t,p) => parent.postMessage({quickNoteRunner:true,t,p},'*');
+const lines = [];
+console.log = (...a) => lines.push(a.map(String).join(' '));
+window.onerror = (m) => send('e', m);
+try {
+  const r = (() => { ${code}\n })();
+  if (typeof r !== 'undefined') lines.push(String(r));
+  send('r', lines.join('\\n') || 'Done (no output).');
+} catch(e) { send('e', e.stack||e.message); }
+<\/script></body></html>`;
+      iframe.srcdoc = frameHtml;
+      output.textContent = "Running…";
+    }
+
+    const wandboxCompilers = {
+      c: "gcc-head", cpp: "gcc-head", java: "openjdk-head",
+      rust: "rust-head", go: "go-head", ruby: "ruby-head",
+      bash: "bash", kotlin: "kotlin-head", r: "r-head",
+    };
+
+    async function runWithWandbox(language, code, stdin) {
+      const compiler = wandboxCompilers[language];
+      if (!compiler) throw new Error(`No runner for "${language}"`);
+      const res = await fetch("https://wandbox.org/api/compile.json", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ compiler, code, stdin: stdin || "" }),
+      });
+      if (!res.ok) throw new Error(`Compiler API error: ${res.status}`);
+      const data = await res.json();
+      const out = [data.program_output, data.program_error, data.compiler_error]
+        .filter(Boolean).join("\n").trim();
+      return out || "Done (no output).";
+    }
+
+    function ansiToHtml(raw) {
+      const escaped = raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      let opens = 0;
+      const FG  = ['#111','#c0392b','#27ae60','#e67e22','#2980b9','#8e44ad','#16a085','#bbb'];
+      const FGB = ['#555','#e74c3c','#2ecc71','#f1c40f','#3498db','#9b59b6','#1abc9c','#fff'];
+      const result = escaped.replace(/\x1b\[([0-9;]*)m/g, (_, p) => {
+        const codes = p ? p.split(';').map(Number) : [0];
+        if (!codes.length || codes[0] === 0) { const c = '</span>'.repeat(opens); opens = 0; return c; }
+        const styles = [];
+        for (let i = 0; i < codes.length; i++) {
+          const c = codes[i];
+          if (c === 1) styles.push('font-weight:bold');
+          else if (c === 2) styles.push('opacity:0.6');
+          else if (c === 3) styles.push('font-style:italic');
+          else if (c === 4) styles.push('text-decoration:underline');
+          else if (c >= 30 && c <= 37) styles.push(`color:${FG[c-30]}`);
+          else if (c >= 90 && c <= 97) styles.push(`color:${FGB[c-90]}`);
+          else if (c >= 40 && c <= 47) styles.push(`background:${FG[c-40]};padding:0 2px`);
+          else if (c >= 100 && c <= 107) styles.push(`background:${FGB[c-100]};padding:0 2px`);
+          else if (c === 38 && codes[i+1] === 2 && i+4 < codes.length) {
+            styles.push(`color:rgb(${codes[i+2]},${codes[i+3]},${codes[i+4]})`); i+=4;
+          } else if (c === 48 && codes[i+1] === 2 && i+4 < codes.length) {
+            styles.push(`background:rgb(${codes[i+2]},${codes[i+3]},${codes[i+4]});padding:0 2px`); i+=4;
+          }
+        }
+        if (!styles.length) return '';
+        opens++;
+        return `<span style="${styles.join(';')}">` ;
+      });
+      return result + '</span>'.repeat(opens);
+    }
+
+    function renderPythonOutput(output, result) {
+      const { text = "", images = [] } = result;
+      let html = '';
+      if (text.trim()) html += ansiToHtml(text);
+      for (const b64 of images) {
+        html += `${html ? '\n' : ''}<img src="data:image/png;base64,${b64}" style="max-width:100%;display:block;border-radius:4px;margin:4px 0;">`;
+      }
+      output.innerHTML = html || 'Done (no output).';
+    }
+
+    function runHtml(code, widget) {
+      const iframe = widget.querySelector(".code-preview");
+      const output = widget.querySelector(".code-output");
+      output.classList.add("hidden");
+      iframe.classList.remove("hidden");
+      iframe.srcdoc = code;
+    }
+
+    async function executeCodeWidget(widget) {
+      const codeInput = widget.querySelector(".code-input");
+      const stdinInput = widget.querySelector(".code-stdin");
+      const output = widget.querySelector(".code-output");
+      const preview = widget.querySelector(".code-preview");
+      const langBadge = widget.querySelector(".code-lang-badge");
+      const code = codeInput ? codeInput.value : "";
+      const stdin = stdinInput ? stdinInput.value : "";
+      const language = detectLanguage(code);
+
+      widget.dataset.language = language;
+      if (langBadge) langBadge.textContent = language;
+      if (codeInput) widget.dataset.code = codeInput.value;
+      if (stdinInput) widget.dataset.stdin = stdinInput.value;
+
+      if (!code.trim()) {
+        output.textContent = "Ready.";
+        output.classList.remove("hidden");
+        preview.classList.add("hidden");
+        return;
+      }
+
+      if (language === "html") {
+        runHtml(code, widget);
+        return;
+      }
+
+      output.classList.remove("hidden");
+      preview.classList.add("hidden");
+      output.textContent = "Running…";
+
+      try {
+        if (language === "javascript") {
+          runJavaScript(code, widget);
+          return;
+        }
+        if (language === "python") {
+          output.textContent = pyodideRuntime ? "Running…" : "Loading Python runtime (first run)…";
+          renderPythonOutput(output, await runPython(code, stdin));
+          return;
+        }
+        output.textContent = await runWithWandbox(language, code, stdin);
+      } catch (error) {
+        output.textContent = "Error: " + error.message;
+      }
+    }
+
+    function hydrateCodeRunner(widget) {
+      const codeInput = widget.querySelector(".code-input");
+      const stdinInput = widget.querySelector(".code-stdin");
+      const runButton = widget.querySelector(".code-run");
+      const removeButton = widget.querySelector(".code-remove");
+      const stdinToggle = widget.querySelector(".code-stdin-btn");
+
+      if (!codeInput || widget.dataset.hydrated === "true") {
+        if (codeInput && widget.dataset.code) {
+          codeInput.value = widget.dataset.code;
+        }
+        if (stdinInput && widget.dataset.stdin) {
+          stdinInput.value = widget.dataset.stdin;
+        }
+        return;
+      }
+
+      codeInput.value = widget.dataset.code || codeInput.textContent || "";
+      widget.dataset.code = codeInput.value;
+      if (stdinInput) {
+        stdinInput.value = widget.dataset.stdin || "";
+      }
+      widget.dataset.hydrated = "true";
+
+      // Update lang badge on input
+      const langBadge = widget.querySelector(".code-lang-badge");
+      codeInput.addEventListener("input", () => {
+        widget.dataset.code = codeInput.value;
+        if (langBadge) langBadge.textContent = detectLanguage(codeInput.value) || "auto";
+        queueSave();
+      });
+
+      if (stdinInput) {
+        stdinInput.addEventListener("input", () => {
+          widget.dataset.stdin = stdinInput.value;
+          queueSave();
+        });
+      }
+
+      if (stdinToggle && stdinInput) {
+        stdinToggle.addEventListener("click", () => {
+          stdinInput.classList.toggle("hidden");
+          stdinToggle.classList.toggle("active");
+        });
+      }
+
+      runButton.addEventListener("click", () => executeCodeWidget(widget));
+      removeButton.addEventListener("click", () => {
+        widget.remove();
+        queueSave();
+        updateMetrics();
+        focusEditor();
+      });
+    }
+
+    function handleSmartShortcuts(event) {
+      if (event.isComposing) {
+        return;
+      }
+
+      if ((event.key.length === 1 || event.key === "Backspace" || event.key === "Delete") && !autocorrectBoundaryKeys.has(event.key)) {
+        cancelScheduledAutocorrect();
+      }
+
+      if (autocorrectBoundaryKeys.has(event.key)) {
+        scheduleAutocorrect();
+      }
+    }
+
+    function importDocumentHtml(content, isHtml) {
+      if (isHtml) {
+        const parser = new DOMParser();
+        const documentNode = parser.parseFromString(content, "text/html");
+        editor.innerHTML = documentNode.body.innerHTML || "<p><br></p>";
+      } else {
+        editor.innerHTML = content
+          .split(/\n{2,}/)
+          .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`)
+          .join("") || "<p><br></p>";
+      }
+      hydrateRichBlocks();
+      updateMetrics();
+      saveDocument();
+    }
+
+    window.addEventListener("message", (event) => {
+      if (!event.data || !event.data.quickNoteRunner) return;
+      const widgets = [...editor.querySelectorAll(".code-runner")];
+      const active = widgets.find((w) => w.querySelector(".code-output").textContent === "Running…") || widgets[widgets.length - 1];
+      if (!active) return;
+      const output = active.querySelector(".code-output");
+      if (event.data.t === "r") output.textContent = event.data.p || "Done (no output).";
+      if (event.data.t === "e") output.textContent = event.data.p || "Error.";
+    });
+
+    commandButtons.forEach((button) => {
+      button.addEventListener("click", () => runCommand(button.dataset.command));
+    });
+
+    blockStyle.addEventListener("change", () => {
+      runCommand("formatBlock", `<${blockStyle.value}>`);
+    });
+
+    textColor.addEventListener("input", () => runCommand("foreColor", textColor.value));
+    highlightColor.addEventListener("input", () => applyHighlight(highlightColor.value));
+
+    document.getElementById("clearFormat").addEventListener("click", () => runCommand("removeFormat"));
+
+    // ── Link popup ──────────────────────────────────────────────────────
+    let linkSavedRange = null;
+    const linkPopup = document.getElementById("linkPopup");
+    const linkUrlInput = document.getElementById("linkUrl");
+    const linkTextInput = document.getElementById("linkDisplayText");
+
+    function showLinkPopup(anchor) {
+      if (anchor) {
+        linkUrlInput.value = anchor.getAttribute("href") || "";
+        linkTextInput.value = anchor.textContent || "";
+      } else {
+        const sel = window.getSelection();
+        linkUrlInput.value = "https://";
+        linkTextInput.value = sel ? sel.toString() : "";
+      }
+      const btn = document.getElementById("insertLink");
+      const rect = btn.getBoundingClientRect();
+      linkPopup.style.top  = (rect.bottom + 8) + "px";
+      linkPopup.style.left = Math.min(rect.left, window.innerWidth - 320) + "px";
+      linkPopup.removeAttribute("hidden");
+      linkUrlInput.focus();
+      linkUrlInput.select();
+    }
+
+    function closeLinkPopup() {
+      linkPopup.setAttribute("hidden", "");
+      linkSavedRange = null;
+    }
+
+    function restoreSelectionAndFocus() {
+      editor.focus();
+      if (linkSavedRange) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(linkSavedRange);
+      }
+    }
+
+    document.getElementById("insertLink").addEventListener("click", () => {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) linkSavedRange = sel.getRangeAt(0).cloneRange();
+      const node = sel && sel.anchorNode;
+      const anchor = node
+        ? (node.nodeType === 1 ? node.closest("a") : node.parentElement && node.parentElement.closest("a"))
+        : null;
+      showLinkPopup(anchor || null);
+    });
+
+    document.getElementById("linkConfirm").addEventListener("click", () => {
+      let url = linkUrlInput.value.trim();
+      if (!url || url === "https://") { closeLinkPopup(); return; }
+      // Security: reject javascript: URIs
+      if (/^javascript:/i.test(url)) { closeLinkPopup(); return; }
+      // Auto-prepend https:// if no scheme
+      if (!/^[a-z][a-z0-9+\-.]*:/i.test(url) && !url.startsWith("/") && !url.startsWith("#")) {
+        url = "https://" + url;
+      }
+      const displayText = linkTextInput.value.trim();
+      restoreSelectionAndFocus();
+      const sel = window.getSelection();
+      const selText = displayText || (sel ? sel.toString() : "") || url;
+      const safeHref = url.replace(/"/g, "%22");
+      const safeText = selText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      document.execCommand("insertHTML", false,
+        `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeText}</a>`);
+      closeLinkPopup();
+    });
+
+    document.getElementById("linkRemove").addEventListener("click", () => {
+      restoreSelectionAndFocus();
+      document.execCommand("unlink");
+      closeLinkPopup();
+    });
+
+    document.getElementById("linkCancel").addEventListener("click", closeLinkPopup);
+
+    linkUrlInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") document.getElementById("linkConfirm").click();
+      if (e.key === "Escape") closeLinkPopup();
+    });
+    linkTextInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") document.getElementById("linkConfirm").click();
+      if (e.key === "Escape") closeLinkPopup();
+    });
+
+    // Click on existing link in editor: Ctrl/Cmd = open; plain click = edit popup
+    editor.addEventListener("click", e => {
+      const anchor = e.target.closest("a");
+      if (!anchor) return;
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        window.open(anchor.href, "_blank", "noopener,noreferrer");
+      } else {
+        e.preventDefault();
+        const range = document.createRange();
+        range.selectNode(anchor);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        linkSavedRange = range.cloneRange();
+        showLinkPopup(anchor);
+      }
+    });
+
+    // Close popup when clicking outside
+    document.addEventListener("click", e => {
+      if (!linkPopup.hasAttribute("hidden") &&
+          !linkPopup.contains(e.target) &&
+          e.target.id !== "insertLink") {
+        closeLinkPopup();
+      }
+    }, true);
+
+    toggleNotes.addEventListener("click", () => {
+      const willOpen = !notesPanel.classList.contains("open");
+      notesPanel.classList.toggle("open", willOpen);
+      toggleNotes.setAttribute("aria-expanded", String(willOpen));
+      toggleNotes.classList.toggle("active", willOpen);
+    });
+
+    document.getElementById("closeSidebar").addEventListener("click", () => {
+      notesPanel.classList.remove("open");
+      toggleNotes.setAttribute("aria-expanded", "false");
+      toggleNotes.classList.remove("active");
+    });
+
+    createNoteButton.addEventListener("click", () => createNote());
+
+    toggleTools.addEventListener("click", () => {
+      const willOpen = toolsPanel.hasAttribute("hidden");
+      toolsPanel.toggleAttribute("hidden");
+      toggleTools.setAttribute("aria-expanded", String(willOpen));
+      toggleTools.classList.toggle("active", willOpen);
+      if (!willOpen) {
+        focusEditor();
+      }
+    });
+
+    document.getElementById("toggleFocus").addEventListener("click", (event) => {
+      app.classList.toggle("hide-ui");
+      event.currentTarget.classList.toggle("active", app.classList.contains("hide-ui"));
+      focusEditor();
+    });
+
+    document.getElementById("exportPdf").addEventListener("click", () => {
+      window.print();
+    });
+
+    document.getElementById("saveHtml").addEventListener("click", () => {
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${currentTitle()}</title></head><body>${serializeEditorHTML()}</body></html>`;
+      downloadFile(html, "html", "text/html;charset=utf-8");
+    });
+
+    const marginPresets = {
+      narrow: { hpad: "24px",  print: "0.5in" },
+      normal: { hpad: "56px",  print: "1in" },
+      wide:   { hpad: "112px", print: "0.75in 2in" },
+    };
+    document.getElementById("marginPreset").addEventListener("change", function () {
+      const p = marginPresets[this.value] || marginPresets.normal;
+      document.documentElement.style.setProperty("--page-hpad", p.hpad);
+      document.getElementById("printMargin").textContent = `@page { margin: ${p.print}; }`;
+    });
+
+    document.getElementById("saveText").addEventListener("click", () => {
+      downloadFile(editor.innerText, "txt", "text/plain;charset=utf-8");
+    });
+
+    document.getElementById("loadDocument").addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", async () => {
+      const [file] = fileInput.files;
+      if (!file) {
+        return;
+      }
+
+      const content = await file.text();
+      importDocumentHtml(content, file.name.match(/\.html?$/i));
+      announce("Imported");
+      fileInput.value = "";
+    });
+
+    document.getElementById("findNext").addEventListener("click", () => {
+      focusEditor();
+      if (!findText.value.trim()) {
+        announce("Enter search text");
+        return;
+      }
+      const found = window.find(findText.value, false, false, true, false, false, false);
+      announce(found ? "Match found" : "No match");
+      updateMetrics();
+    });
+
+    document.getElementById("replaceAll").addEventListener("click", () => {
+      const count = replaceAllText(findText.value, replaceText.value);
+      if (count) {
+        updateMetrics();
+        queueSave();
+      }
+      announce(count ? `Replaced ${count}` : "No matches");
+    });
+
+    editor.addEventListener("keydown", handleSmartShortcuts);
+
+    editor.addEventListener("input", (e) => {
+      updateMetrics();
+      queueSave();
+      checkAndRenderMath();
+      updateMathPreview();
+      if (e.data === " ") {
+        const range = getActiveRange();
+        if (range && range.collapsed) {
+          const block = getCurrentBlock(
+            range.startContainer.nodeType === Node.TEXT_NODE
+              ? range.startContainer.parentNode
+              : range.startContainer
+          );
+          if (!block) return;
+          const text = block.textContent;
+
+          // \code → code runner
+          if (text.trimEnd() === codeWidgetTrigger) {
+            const runner = createCodeRunner();
+            replaceNode(block, runner);
+            const codeInput = runner.querySelector(".code-input");
+            if (codeInput) codeInput.focus();
+            return;
+          }
+
+          // * or - → bullet list
+          if (/^[*\-]\s$/.test(text)) {
+            document.execCommand("insertUnorderedList");
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount) {
+              const li = sel.getRangeAt(0).startContainer;
+              const textNode = li.nodeType === Node.TEXT_NODE ? li : li.firstChild;
+              if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                textNode.nodeValue = textNode.nodeValue.replace(/^[*\-]\s/, "");
+              }
+            }
+            queueSave();
+          }
+        }
+      }
+    });
+
+    editor.addEventListener("blur", hideMathPreview);
+
+    editor.addEventListener("keyup", updateToolbarState);
+    editor.addEventListener("mouseup", updateToolbarState);
+
+    document.addEventListener("selectionchange", () => {
+      const selection = window.getSelection();
+      if (!selection || !selection.anchorNode) {
+        return;
+      }
+
+      if (document.activeElement === editor || editor.contains(document.activeElement) || editor.contains(selection.anchorNode)) {
+        updateMetrics();
+        updateToolbarState();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      const mod = event.ctrlKey || event.metaKey;
+      if (!mod) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+
+      if (key === "s") {
+        event.preventDefault();
+        document.getElementById("saveHtml").click();
+      }
+
+      if (key === "f") {
+        event.preventDefault();
+        if (toolsPanel.hasAttribute("hidden")) {
+          toolsPanel.removeAttribute("hidden");
+          toggleTools.setAttribute("aria-expanded", "true");
+          toggleTools.classList.add("active");
+        }
+        findText.focus();
+        findText.select();
+      }
+
+      if (key === "Escape") {
+        hideMathPreview();
+      }
+    });
+
+    loadSavedDocument();
+    runWhenIdle(() => loadSpellDictionary(), 2000);
+    updateMetrics();
+    updateToolbarState();
+    focusEditor();
+  </script>
+</body>
+</html>
