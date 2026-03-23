@@ -313,6 +313,46 @@
       color: var(--muted);
     }
 
+    .link-preview {
+      position: fixed;
+      z-index: 300;
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 340px;
+    }
+    .link-preview[hidden] { display: none; }
+    .link-preview-url {
+      font-size: 0.82rem;
+      color: #1a73e8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
+    }
+    .link-preview-frame {
+      width: 100%;
+      height: 180px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fafafa;
+      pointer-events: none;
+    }
+    .link-preview-row {
+      display: flex;
+      gap: 6px;
+    }
+    .link-preview-row .tool {
+      font-size: 0.82rem;
+      min-height: 30px;
+      padding: 0 10px;
+    }
+
     .notes-panel {
       width: var(--ui-width);
       margin: 0 auto;
@@ -494,6 +534,40 @@
       display: flex;
       justify-content: center;
       padding: 0;
+      position: relative;
+    }
+
+    .margin-guide {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      cursor: col-resize;
+      z-index: 10;
+      border: none;
+      background: transparent;
+    }
+    .margin-guide::before {
+      content: '';
+      display: block;
+      width: 1px;
+      height: 100%;
+      margin: 0 auto;
+      border-left: 1.5px dashed rgba(17,17,17,0.12);
+      transition: border-color 200ms;
+    }
+    .margin-guide:hover::before,
+    .margin-guide.dragging::before {
+      border-color: rgba(26,115,232,0.5);
+      width: 2px;
+    }
+    .margin-guide-left {
+      left: 0;
+      transform: translateX(-1px);
+    }
+    .margin-guide-right {
+      right: 0;
+      transform: translateX(1px);
     }
 
     .page {
@@ -832,10 +906,39 @@
       display: none;
     }
 
-    .hide-ui .page {
-      width: min(1180px, calc(100vw - 48px));
-      min-height: 100vh;
-      padding-top: 32px;
+    .export-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+      min-width: 160px;
+      z-index: 50;
+      padding: 4px;
+    }
+    .export-menu[hidden] { display: none; }
+    .export-menu button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 0.88rem;
+      cursor: pointer;
+      border-radius: 8px;
+      color: var(--text);
+    }
+    .export-menu button:hover {
+      background: #f4f4f4;
+    }
+    .export-wrap {
+      position: relative;
     }
 
     @media (max-width: 900px) {
@@ -885,12 +988,22 @@
         display: none;
       }
 
+      .margin-guide {
+        display: none;
+      }
+
       .page {
         width: 100%;
         min-height: auto;
-        padding: 0;
+        padding: 0 !important;
         box-shadow: none;
+        font-size: 11pt;
+        line-height: 1.6;
       }
+
+      .page h1 { font-size: 22pt; }
+      .page h2 { font-size: 17pt; }
+      .page h3 { font-size: 14pt; }
 
       .page a {
         color: #1a73e8;
@@ -914,6 +1027,12 @@
       .table-widget td {
         border: 1px solid #999;
       }
+
+      .link-preview,
+      .link-popup,
+      .export-menu {
+        display: none !important;
+      }
     }
   </style>
 </head>
@@ -935,9 +1054,14 @@
         <div class="topbar-actions">
           <button class="tool pill" type="button" id="toggleNotes" aria-expanded="false" aria-controls="notesPanel">Notes</button>
           <button class="tool pill" type="button" id="toggleTools" aria-expanded="false" aria-controls="toolsPanel">Tools</button>
-          <button class="tool pill" type="button" id="toggleFocus" title="Focus mode">Focus</button>
-          <button class="tool pill" type="button" id="exportPdf" title="Export as PDF">PDF</button>
-          <button class="tool pill" type="button" id="saveHtml" title="Download HTML">Export</button>
+          <div class="export-wrap">
+            <button class="tool pill" type="button" id="exportToggle">Export ▾</button>
+            <div class="export-menu" id="exportMenu" hidden>
+              <button type="button" id="exportPdf">🖨️ Print / PDF</button>
+              <button type="button" id="saveHtml">🌐 HTML</button>
+              <button type="button" id="saveText">📄 Plain Text</button>
+            </div>
+          </div>
           <span class="status-dot" id="statusDot" title="Ready"></span>
         </div>
       </header>
@@ -972,15 +1096,8 @@
           <button class="tool" type="button" id="findNext" title="Find next">↓</button>
           <button class="tool" type="button" id="replaceAll" title="Replace all">All</button>
           <span class="tb-sep" aria-hidden="true"></span>
-          <button class="tool" type="button" id="saveText" title="Export TXT">TXT</button>
           <button class="tool" type="button" id="loadDocument" title="Import file">Import</button>
           <input id="fileInput" type="file" accept=".html,.htm,.txt" hidden>
-          <span class="tb-sep" aria-hidden="true"></span>
-          <select id="marginPreset" aria-label="Margins" title="Page margins">
-            <option value="narrow">Narrow</option>
-            <option value="normal" selected>Normal</option>
-            <option value="wide">Wide</option>
-          </select>
           <span class="tb-sep" aria-hidden="true"></span>
           <span class="tb-stats"><strong id="wordCount">0</strong> words · <span id="charCount">0</span> chars</span>
         </div>
@@ -988,10 +1105,12 @@
 
       <main class="workspace">
         <div class="page-wrap">
+          <div class="margin-guide margin-guide-left" id="marginGuideLeft"></div>
           <article id="editor" class="page" contenteditable="true" spellcheck="true">
             <h1>Quick Note</h1>
             <p><br></p>
           </article>
+          <div class="margin-guide margin-guide-right" id="marginGuideRight"></div>
         </div>
       </main>
 
@@ -999,6 +1118,17 @@
         <span id="docMeta">Unsaved local changes will be preserved automatically.</span>
         <span id="cursorMeta">Editing</span>
       </div>
+    </div>
+  </div>
+
+  <div class="link-preview" id="linkPreview" hidden>
+    <span class="link-preview-url" id="linkPreviewUrl"></span>
+    <iframe class="link-preview-frame" id="linkPreviewFrame" sandbox="allow-scripts allow-same-origin" loading="lazy" referrerpolicy="no-referrer"></iframe>
+    <div class="link-preview-row">
+      <button class="tool" type="button" id="linkPreviewOpen" data-role="primary">Open</button>
+      <button class="tool" type="button" id="linkPreviewEdit">Edit</button>
+      <button class="tool" type="button" id="linkPreviewCopy">Copy URL</button>
+      <button class="tool" type="button" id="linkPreviewClose">✕</button>
     </div>
   </div>
 
@@ -2506,6 +2636,77 @@ try {
 
     document.getElementById("clearFormat").addEventListener("click", () => runCommand("removeFormat"));
 
+    // ── Link preview tooltip ──────────────────────────────────────────
+    const linkPreview = document.getElementById("linkPreview");
+    const linkPreviewUrl = document.getElementById("linkPreviewUrl");
+    const linkPreviewFrame = document.getElementById("linkPreviewFrame");
+    let linkPreviewAnchor = null;
+
+    function showLinkPreview(anchor) {
+      const href = anchor.getAttribute("href") || "";
+      if (!href || href === "#") return;
+      linkPreviewAnchor = anchor;
+      linkPreviewUrl.textContent = href;
+      linkPreviewUrl.title = href;
+      // Load preview in iframe
+      try {
+        const url = new URL(href, window.location.href);
+        linkPreviewFrame.src = url.href;
+      } catch {
+        linkPreviewFrame.src = "";
+      }
+      const rect = anchor.getBoundingClientRect();
+      linkPreview.style.top = (rect.bottom + 6) + "px";
+      linkPreview.style.left = Math.min(Math.max(8, rect.left), window.innerWidth - 360) + "px";
+      linkPreview.removeAttribute("hidden");
+    }
+
+    function closeLinkPreview() {
+      linkPreview.setAttribute("hidden", "");
+      linkPreviewFrame.src = "";
+      linkPreviewAnchor = null;
+    }
+
+    document.getElementById("linkPreviewOpen").addEventListener("click", () => {
+      if (linkPreviewAnchor) window.open(linkPreviewAnchor.href, "_blank", "noopener,noreferrer");
+      closeLinkPreview();
+    });
+
+    document.getElementById("linkPreviewEdit").addEventListener("click", () => {
+      const anchor = linkPreviewAnchor;
+      closeLinkPreview();
+      if (anchor) {
+        const range = document.createRange();
+        range.selectNode(anchor);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        linkSavedRange = range.cloneRange();
+        showLinkPopup(anchor);
+      }
+    });
+
+    document.getElementById("linkPreviewCopy").addEventListener("click", () => {
+      if (linkPreviewAnchor) {
+        navigator.clipboard.writeText(linkPreviewAnchor.href).then(() => {
+          const btn = document.getElementById("linkPreviewCopy");
+          btn.textContent = "Copied!";
+          setTimeout(() => btn.textContent = "Copy URL", 1200);
+        });
+      }
+    });
+
+    document.getElementById("linkPreviewClose").addEventListener("click", closeLinkPreview);
+
+    // Close preview when clicking outside
+    document.addEventListener("click", e => {
+      if (!linkPreview.hasAttribute("hidden") &&
+          !linkPreview.contains(e.target) &&
+          !e.target.closest("a")) {
+        closeLinkPreview();
+      }
+    }, true);
+
     // ── Link popup ──────────────────────────────────────────────────────
     let linkSavedRange = null;
     const linkPopup = document.getElementById("linkPopup");
@@ -2591,7 +2792,7 @@ try {
       if (e.key === "Escape") closeLinkPopup();
     });
 
-    // Click on existing link in editor: Ctrl/Cmd = open; plain click = edit popup
+    // Click on existing link in editor: Ctrl/Cmd = open; plain click = preview
     editor.addEventListener("click", e => {
       const anchor = e.target.closest("a");
       if (!anchor) return;
@@ -2600,13 +2801,8 @@ try {
         window.open(anchor.href, "_blank", "noopener,noreferrer");
       } else {
         e.preventDefault();
-        const range = document.createRange();
-        range.selectNode(anchor);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-        linkSavedRange = range.cloneRange();
-        showLinkPopup(anchor);
+        closeLinkPopup();
+        showLinkPreview(anchor);
       }
     });
 
@@ -2644,33 +2840,88 @@ try {
       }
     });
 
-    document.getElementById("toggleFocus").addEventListener("click", (event) => {
-      app.classList.toggle("hide-ui");
-      event.currentTarget.classList.toggle("active", app.classList.contains("hide-ui"));
-      focusEditor();
+    // ── Export menu ────────────────────────────────────────────────────
+    const exportMenu = document.getElementById("exportMenu");
+    document.getElementById("exportToggle").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = exportMenu.hasAttribute("hidden");
+      exportMenu.toggleAttribute("hidden", !willOpen);
+    });
+    document.addEventListener("click", (e) => {
+      if (!exportMenu.hasAttribute("hidden") && !exportMenu.contains(e.target)) {
+        exportMenu.setAttribute("hidden", "");
+      }
     });
 
     document.getElementById("exportPdf").addEventListener("click", () => {
+      exportMenu.setAttribute("hidden", "");
       window.print();
     });
 
     document.getElementById("saveHtml").addEventListener("click", () => {
+      exportMenu.setAttribute("hidden", "");
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${currentTitle()}</title></head><body>${serializeEditorHTML()}</body></html>`;
       downloadFile(html, "html", "text/html;charset=utf-8");
     });
 
-    const marginPresets = {
-      narrow: { hpad: "24px",  print: "0.5in" },
-      normal: { hpad: "56px",  print: "1in" },
-      wide:   { hpad: "112px", print: "0.75in 2in" },
-    };
-    document.getElementById("marginPreset").addEventListener("change", function () {
-      const p = marginPresets[this.value] || marginPresets.normal;
-      document.documentElement.style.setProperty("--page-hpad", p.hpad);
-      document.getElementById("printMargin").textContent = `@page { margin: ${p.print}; }`;
-    });
+    // ── Draggable margin guides ──────────────────────────────────────────
+    (function initMarginGuides() {
+      const pageEl = editor;
+      const leftGuide = document.getElementById("marginGuideLeft");
+      const rightGuide = document.getElementById("marginGuideRight");
+      const MIN_PAD = 8;
+      const MAX_PAD = 240;
+
+      function positionGuides() {
+        const pad = parseInt(getComputedStyle(pageEl).paddingLeft) || 56;
+        leftGuide.style.left = (pad - 2) + "px";
+        rightGuide.style.right = (pad - 2) + "px";
+      }
+
+      function setupDrag(guide, side) {
+        let startX, startPad;
+        function onDown(e) {
+          e.preventDefault();
+          guide.classList.add("dragging");
+          startX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+          startPad = parseInt(getComputedStyle(pageEl).paddingLeft) || 56;
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+          document.addEventListener("touchmove", onMove, { passive: false });
+          document.addEventListener("touchend", onUp);
+        }
+        function onMove(e) {
+          e.preventDefault();
+          const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+          const delta = side === "left"
+            ? clientX - startX
+            : startX - clientX;
+          const newPad = Math.max(MIN_PAD, Math.min(MAX_PAD, startPad + delta));
+          document.documentElement.style.setProperty("--page-hpad", newPad + "px");
+          positionGuides();
+        }
+        function onUp() {
+          guide.classList.remove("dragging");
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+          document.removeEventListener("touchmove", onMove);
+          document.removeEventListener("touchend", onUp);
+          // Update print margin proportionally
+          const currentPad = parseInt(getComputedStyle(pageEl).paddingLeft) || 56;
+          const printIn = Math.max(0.25, currentPad / 96).toFixed(2);
+          document.getElementById("printMargin").textContent = `@page { margin: ${printIn}in; }`;
+        }
+        guide.addEventListener("mousedown", onDown);
+        guide.addEventListener("touchstart", onDown, { passive: false });
+      }
+
+      setupDrag(leftGuide, "left");
+      setupDrag(rightGuide, "right");
+      positionGuides();
+    })();
 
     document.getElementById("saveText").addEventListener("click", () => {
+      exportMenu.setAttribute("hidden", "");
       downloadFile(editor.innerText, "txt", "text/plain;charset=utf-8");
     });
 
