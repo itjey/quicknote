@@ -792,6 +792,24 @@
       margin: 16px 0;
     }
 
+    .page ul, .page ol {
+      padding-left: 1.6em;
+      margin: 0.3em 0;
+    }
+    .page ul ul, .page ol ol, .page ul ol, .page ol ul {
+      margin: 0;
+    }
+    .page ul ul { list-style-type: circle; }
+    .page ul ul ul { list-style-type: square; }
+    .page ol ol { list-style-type: lower-alpha; }
+    .page ol ol ol { list-style-type: lower-roman; }
+
+    .page hr {
+      border: none;
+      border-top: 1.5px solid var(--line);
+      margin: 1.5em 0;
+    }
+
     .page blockquote {
       margin: 18px 0;
       padding: 8px 0 8px 18px;
@@ -1315,19 +1333,33 @@
             <option value="H1">H1</option>
             <option value="H2">H2</option>
             <option value="H3">H3</option>
+            <option value="H4">H4</option>
+            <option value="H5">H5</option>
+            <option value="H6">H6</option>
             <option value="BLOCKQUOTE">Quote</option>
           </select>
           <button class="tool" type="button" data-command="bold" title="Bold"><b>B</b></button>
           <button class="tool" type="button" data-command="italic" title="Italic"><i>I</i></button>
           <button class="tool" type="button" data-command="underline" title="Underline"><u>U</u></button>
           <button class="tool" type="button" data-command="strikeThrough" title="Strikethrough"><s>S</s></button>
+          <button class="tool" type="button" data-command="superscript" title="Superscript (Ctrl+.)"><span style="font-size:0.7em;vertical-align:super">A²</span></button>
+          <button class="tool" type="button" data-command="subscript" title="Subscript (Ctrl+,)"><span style="font-size:0.7em;vertical-align:sub">A₂</span></button>
           <label class="tool-color" title="Text color"><input id="textColor" type="color" value="#111111" aria-label="Text color"></label>
           <label class="tool-color" title="Highlight"><input id="highlightColor" type="color" value="#fff2cc" aria-label="Highlight color"></label>
           <button class="tool" type="button" id="clearFormat" title="Clear formatting">✕</button>
           <span class="tb-sep" aria-hidden="true"></span>
+          <button class="tool" type="button" id="alignLeft" title="Align left (Ctrl+Shift+L)" style="font-size:0.72rem">≡←</button>
+          <button class="tool" type="button" id="alignCenter" title="Align center (Ctrl+Shift+E)" style="font-size:0.72rem">≡↔</button>
+          <button class="tool" type="button" id="alignRight" title="Align right (Ctrl+Shift+R)" style="font-size:0.72rem">≡→</button>
+          <span class="tb-sep" aria-hidden="true"></span>
           <button class="tool" type="button" data-command="insertUnorderedList" title="Bullet list">•</button>
           <button class="tool" type="button" data-command="insertOrderedList" title="Numbered list">1.</button>
+          <button class="tool" type="button" id="indentBtn" title="Indent (Tab)">→|</button>
+          <button class="tool" type="button" id="outdentBtn" title="Outdent (Shift+Tab)">|←</button>
           <button class="tool" type="button" id="insertLink" title="Insert link">Link</button>
+          <button class="tool" type="button" id="insertHr" title="Horizontal rule">―</button>
+          <button class="tool" type="button" id="insertImage" title="Insert image">Img</button>
+          <input id="imageInput" type="file" accept="image/*" hidden>
           <span class="tb-sep" aria-hidden="true"></span>
           <button class="tool" type="button" data-command="undo" title="Undo">↩</button>
           <button class="tool" type="button" data-command="redo" title="Redo">↪</button>
@@ -1592,6 +1624,8 @@
       "italic",
       "underline",
       "strikeThrough",
+      "superscript",
+      "subscript",
       "insertUnorderedList",
       "insertOrderedList"
     ];
@@ -3346,6 +3380,22 @@ try {
         return;
       }
 
+      // Tab / Shift+Tab → indent/outdent in lists
+      if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const sel = window.getSelection();
+        if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
+          const li = sel.anchorNode.nodeType === Node.TEXT_NODE
+            ? sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest("li")
+            : sel.anchorNode.closest && sel.anchorNode.closest("li");
+          if (li) {
+            event.preventDefault();
+            document.execCommand(event.shiftKey ? "outdent" : "indent");
+            queueSave();
+            return;
+          }
+        }
+      }
+
       if ((event.key.length === 1 || event.key === "Backspace" || event.key === "Delete") && !autocorrectBoundaryKeys.has(event.key)) {
         cancelScheduledAutocorrect();
       }
@@ -3393,6 +3443,57 @@ try {
     highlightColor.addEventListener("input", () => applyHighlight(highlightColor.value));
 
     document.getElementById("clearFormat").addEventListener("click", () => runCommand("removeFormat"));
+
+    // ── Alignment ──────────────────────────────────────────────────────
+    document.getElementById("alignLeft").addEventListener("click", () => runCommand("justifyLeft"));
+    document.getElementById("alignCenter").addEventListener("click", () => runCommand("justifyCenter"));
+    document.getElementById("alignRight").addEventListener("click", () => runCommand("justifyRight"));
+
+    // ── Indent / Outdent ──────────────────────────────────────────────
+    document.getElementById("indentBtn").addEventListener("click", () => runCommand("indent"));
+    document.getElementById("outdentBtn").addEventListener("click", () => runCommand("outdent"));
+
+    // ── Horizontal rule ───────────────────────────────────────────────
+    document.getElementById("insertHr").addEventListener("click", () => {
+      focusEditor();
+      document.execCommand("insertHorizontalRule");
+      queueSave();
+    });
+
+    // ── Image insert (upload) ─────────────────────────────────────────
+    const imageInput = document.getElementById("imageInput");
+    document.getElementById("insertImage").addEventListener("click", () => imageInput.click());
+    imageInput.addEventListener("change", () => {
+      const file = imageInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        focusEditor();
+        document.execCommand("insertImage", false, reader.result);
+        queueSave();
+      };
+      reader.readAsDataURL(file);
+      imageInput.value = "";
+    });
+
+    // ── Paste image from clipboard ────────────────────────────────────
+    editor.addEventListener("paste", (e) => {
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          const reader = new FileReader();
+          reader.onload = () => {
+            document.execCommand("insertImage", false, reader.result);
+            queueSave();
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
+    });
 
     // ── Link preview tooltip ──────────────────────────────────────────
     const linkPreview = document.getElementById("linkPreview");
@@ -4029,14 +4130,35 @@ try {
           // * or - → bullet list
           if (/^[*\-]\s$/.test(text)) {
             document.execCommand("insertUnorderedList");
-            const sel = window.getSelection();
-            if (sel && sel.rangeCount) {
-              const li = sel.getRangeAt(0).startContainer;
+            const sel2 = window.getSelection();
+            if (sel2 && sel2.rangeCount) {
+              const li = sel2.getRangeAt(0).startContainer;
               const textNode = li.nodeType === Node.TEXT_NODE ? li : li.firstChild;
               if (textNode && textNode.nodeType === Node.TEXT_NODE) {
                 textNode.nodeValue = textNode.nodeValue.replace(/^[*\-]\s/, "");
               }
             }
+            queueSave();
+          }
+
+          // 1. → ordered list
+          if (/^\d+\.\s$/.test(text)) {
+            document.execCommand("insertOrderedList");
+            const sel3 = window.getSelection();
+            if (sel3 && sel3.rangeCount) {
+              const li = sel3.getRangeAt(0).startContainer;
+              const textNode = li.nodeType === Node.TEXT_NODE ? li : li.firstChild;
+              if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                textNode.nodeValue = textNode.nodeValue.replace(/^\d+\.\s/, "");
+              }
+            }
+            queueSave();
+          }
+
+          // --- → horizontal rule
+          if (/^-{3,}\s$/.test(text)) {
+            block.innerHTML = "";
+            document.execCommand("insertHorizontalRule");
             queueSave();
           }
         }
@@ -4062,9 +4184,13 @@ try {
 
     document.addEventListener("keydown", (event) => {
       const mod = event.ctrlKey || event.metaKey;
-      if (!mod) {
+
+      if (event.key === "Escape") {
+        hideMathPreview();
         return;
       }
+
+      if (!mod) return;
 
       const key = event.key.toLowerCase();
 
@@ -4079,9 +4205,14 @@ try {
         findText.select();
       }
 
-      if (key === "Escape") {
-        hideMathPreview();
-      }
+      // Ctrl+. → superscript, Ctrl+, → subscript
+      if (event.key === ".") { event.preventDefault(); runCommand("superscript"); }
+      if (event.key === ",") { event.preventDefault(); runCommand("subscript"); }
+
+      // Ctrl+Shift+L/E/R → align
+      if (event.shiftKey && key === "l") { event.preventDefault(); runCommand("justifyLeft"); }
+      if (event.shiftKey && key === "e") { event.preventDefault(); runCommand("justifyCenter"); }
+      if (event.shiftKey && key === "r") { event.preventDefault(); runCommand("justifyRight"); }
     });
 
     loadSavedDocument();
