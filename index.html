@@ -16,8 +16,9 @@
       --line-strong: rgba(17, 17, 17, 0.16);
       --text: #171717;
       --muted: #707070;
-      --editor-width: calc(100vw - 64px);
-      --ui-width: calc(100vw - 32px);
+      --sidebar-w: 0px;
+      --editor-width: calc(100vw - var(--sidebar-w) - 64px);
+      --ui-width: calc(100vw - var(--sidebar-w) - 32px);
       --page-hpad: 56px;
       font-family: "Manrope", "Helvetica Neue", sans-serif;
     }
@@ -70,23 +71,22 @@
     }
 
     .sidebar {
-      position: fixed;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 260px;
+      width: 0;
+      min-width: 0;
       background: var(--surface);
-      border-right: 1px solid var(--line);
-      z-index: 30;
+      border-right: 0 solid var(--line);
       display: flex;
       flex-direction: column;
-      transform: translateX(-100%);
-      transition: transform 180ms ease;
       overflow: hidden;
+      transition: width 180ms ease, min-width 180ms ease, border-right-width 0ms 180ms;
+      flex-shrink: 0;
     }
 
     .sidebar.open {
-      transform: translateX(0);
+      width: 260px;
+      min-width: 260px;
+      border-right-width: 1px;
+      transition: width 180ms ease, min-width 180ms ease, border-right-width 0ms 0ms;
     }
 
     .sidebar-head {
@@ -175,9 +175,11 @@
 
     .shell {
       flex: 1;
+      min-width: 0;
       min-height: 100vh;
       display: grid;
       grid-template-rows: auto 1fr;
+      transition: flex 180ms ease;
     }
 
     .topbar,
@@ -632,7 +634,7 @@
     .page {
       width: var(--editor-width);
       min-height: calc(100vh - 76px);
-      padding: 56px var(--page-hpad) 96px;
+      padding: 28px var(--page-hpad) 96px;
       border: 0;
       outline: none;
       background: transparent;
@@ -1148,8 +1150,8 @@
 
     @media (max-width: 900px) {
       :root {
-        --editor-width: calc(100vw - 24px);
-        --ui-width: calc(100vw - 16px);
+        --editor-width: calc(100vw - var(--sidebar-w) - 24px);
+        --ui-width: calc(100vw - var(--sidebar-w) - 16px);
       }
 
       .topbar {
@@ -1651,6 +1653,22 @@
       if (saved) writingPrefs = { ...defaultWritingPrefs, ...saved };
     } catch {}
     function saveWritingPrefs() { localStorage.setItem(writingPrefsKey, JSON.stringify(writingPrefs)); }
+
+    // Words to never autocorrect (informal/slang/acronyms/proper shorthand)
+    const autocorrectSkip = new Set([
+      "lol", "lmao", "omg", "brb", "idk", "imo", "imho", "smh", "tbh", "fyi",
+      "btw", "afaik", "iirc", "tldr", "asap", "eta", "rsvp", "aka", "diy",
+      "faq", "irl", "nvm", "omw", "rofl", "ttyl", "wip", "yolo", "fomo",
+      "goat", "sus", "vibe", "vibes", "chill", "lit", "dope", "nah", "yep",
+      "yup", "nope", "kinda", "sorta", "gonna", "wanna", "gotta", "lemme",
+      "dunno", "innit", "ain", "ok", "okay", "hmm", "huh", "meh", "ugh",
+      "oops", "whoa", "woah", "yay", "ooh", "ahh", "umm", "haha", "hehe",
+      "lmk", "dm", "pm", "rn", "af", "gg", "wp", "ez", "op", "noob",
+      "wifi", "url", "api", "css", "html", "json", "sql", "php", "npm",
+      "cli", "gui", "ide", "sdk", "cdn", "dns", "ssh", "ssl", "tls",
+      "http", "https", "localhost", "repo", "dev", "prod", "env", "config",
+      "admin", "auth", "async", "init", "src", "args", "params", "util",
+    ]);
 
     document.execCommand("styleWithCSS", false, true);
     document.execCommand("defaultParagraphSeparator", false, "p");
@@ -2413,6 +2431,7 @@
 
       const originalWord = context.word;
       const normalizedWord = originalWord.toLowerCase();
+      if (autocorrectSkip.has(normalizedWord)) return;
       let replacement = autocorrectOverrides[normalizedWord] || null;
 
       if (!replacement) {
@@ -2596,7 +2615,7 @@
     function getCurrentBlock(node) {
       let current = node;
       while (current && current !== editor) {
-        if (["P", "DIV", "LI", "BLOCKQUOTE"].includes(current.nodeName)) {
+        if (["P", "DIV", "LI", "BLOCKQUOTE", "H1", "H2", "H3", "H4", "H5", "H6"].includes(current.nodeName)) {
           return current;
         }
         current = current.parentNode;
@@ -3518,15 +3537,18 @@ try {
       }
     }, true);
 
+    function setSidebar(open) {
+      notesPanel.classList.toggle("open", open);
+      toggleNotes.setAttribute("aria-expanded", String(open));
+      document.documentElement.style.setProperty("--sidebar-w", open ? "260px" : "0px");
+    }
+
     toggleNotes.addEventListener("click", () => {
-      const willOpen = !notesPanel.classList.contains("open");
-      notesPanel.classList.toggle("open", willOpen);
-      toggleNotes.setAttribute("aria-expanded", String(willOpen));
+      setSidebar(!notesPanel.classList.contains("open"));
     });
 
     document.getElementById("closeSidebar").addEventListener("click", () => {
-      notesPanel.classList.remove("open");
-      toggleNotes.setAttribute("aria-expanded", "false");
+      setSidebar(false);
     });
 
     createNoteButton.addEventListener("click", () => createNote());
