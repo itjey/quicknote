@@ -151,6 +151,17 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      border: none;
+      background: transparent;
+      outline: none;
+      padding: 0;
+      width: 100%;
+      font-family: inherit;
+      cursor: text;
+    }
+    .note-title:focus {
+      background: rgba(17,17,17,0.04);
+      border-radius: 3px;
     }
 
     .note-meta {
@@ -173,30 +184,7 @@
       opacity: 1;
     }
 
-    .note-ctx {
-      position: fixed;
-      z-index: 50;
-      background: #fff;
-      border: 1px solid var(--line-strong);
-      border-radius: 8px;
-      padding: 4px 0;
-      min-width: 120px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.10);
-    }
-    .note-ctx button {
-      display: block;
-      width: 100%;
-      border: 0;
-      background: transparent;
-      text-align: left;
-      padding: 6px 14px;
-      font-size: 0.85rem;
-      cursor: pointer;
-      color: var(--text);
-    }
-    .note-ctx button:hover {
-      background: rgba(17,17,17,0.06);
-    }
+    .note-ctx { display: none; }
 
     .shell {
       flex: 1;
@@ -1782,13 +1770,38 @@
         const openButton = document.createElement("button");
         openButton.type = "button";
         openButton.className = `note-open${note.id === currentNoteId ? " active" : ""}`;
-        openButton.innerHTML = `<span class="note-title">${note.title}</span><span class="note-meta">${formatNoteDate(note.updatedAt)}</span>`;
-        openButton.addEventListener("click", () => switchNote(note.id));
-        openButton._switchId = note.id;
-        openButton.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          showNoteContextMenu(e.clientX, e.clientY, note.id);
+
+        const titleInput = document.createElement("input");
+        titleInput.type = "text";
+        titleInput.className = "note-title";
+        titleInput.value = note.title;
+        titleInput.spellcheck = false;
+
+        // Clicking the title focuses it for editing; clicking the row area switches note
+        titleInput.addEventListener("focus", (e) => e.stopPropagation());
+        titleInput.addEventListener("click", (e) => e.stopPropagation());
+        titleInput.addEventListener("blur", () => {
+          const val = titleInput.value.trim();
+          if (val && val !== note.title) {
+            note.title = val;
+            persistNotes();
+          } else {
+            titleInput.value = note.title;
+          }
         });
+        titleInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); titleInput.blur(); }
+          if (e.key === "Escape") { titleInput.value = note.title; titleInput.blur(); }
+          e.stopPropagation();
+        });
+
+        const metaEl = document.createElement("span");
+        metaEl.className = "note-meta";
+        metaEl.textContent = formatNoteDate(note.updatedAt);
+
+        openButton.appendChild(titleInput);
+        openButton.appendChild(metaEl);
+        openButton.addEventListener("click", () => switchNote(note.id));
 
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
