@@ -173,6 +173,31 @@
       opacity: 1;
     }
 
+    .note-ctx {
+      position: fixed;
+      z-index: 50;
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 4px 0;
+      min-width: 120px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+    }
+    .note-ctx button {
+      display: block;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .note-ctx button:hover {
+      background: rgba(17,17,17,0.06);
+    }
+
     .shell {
       flex: 1;
       min-width: 0;
@@ -1531,7 +1556,7 @@
 
     // Render auth title with KaTeX after katex is available
     if (window.katex) {
-      katex.render("\\text{Quick}\\enspace\\text{Note}", authTitle, { throwOnError: false });
+      katex.render("\\text{Quick}\\;\\text{Note}", authTitle, { throwOnError: false });
     } else {
       authTitle.textContent = "Quick Note";
     }
@@ -1559,7 +1584,7 @@
     const currentNoteKey = "quick-note-current-note";
     const codeWidgetTrigger = "\\code";
 
-    katex.render("\\text{Quick}\\enspace\\text{Note}", document.getElementById("appTitle"), { throwOnError: false });
+    katex.render("\\text{Quick}\\;\\text{Note}", document.getElementById("appTitle"), { throwOnError: false });
 
     const commandButtons = [...document.querySelectorAll("[data-command]")];
     const stateCommands = [
@@ -1673,8 +1698,9 @@
     document.execCommand("styleWithCSS", false, true);
     document.execCommand("defaultParagraphSeparator", false, "p");
 
-    function defaultNoteContent() {
-      return "<h1>Quick Note</h1><p><br></p>";
+    function defaultNoteContent(title) {
+      const safe = (title || "Quick Note").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return `<h1>${safe}</h1><p><br></p>`;
     }
 
     function createNoteRecord(title = "Untitled") {
@@ -1682,7 +1708,7 @@
       return {
         id: noteId,
         title,
-        content: defaultNoteContent(),
+        content: defaultNoteContent(title),
         updatedAt: Date.now()
       };
     }
@@ -1724,6 +1750,11 @@
         openButton.className = `note-open${note.id === currentNoteId ? " active" : ""}`;
         openButton.innerHTML = `<span class="note-title">${note.title}</span><span class="note-meta">${formatNoteDate(note.updatedAt)}</span>`;
         openButton.addEventListener("click", () => switchNote(note.id));
+        openButton._switchId = note.id;
+        openButton.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          showNoteContextMenu(e.clientX, e.clientY, note.id);
+        });
 
         const deleteButton = document.createElement("button");
         deleteButton.type = "button";
@@ -1746,8 +1777,14 @@
       }
 
       if (!Array.isArray(notes) || notes.length === 0) {
-        notes = [createNoteRecord("Quick Note")];
+        notes = [createNoteRecord("Note 1")];
       }
+
+      // Seed counter from existing "Note N" titles
+      notes.forEach((n) => {
+        const m = n.title && n.title.match(/^Note\s+(\d+)$/);
+        if (m) noteCounter = Math.max(noteCounter, parseInt(m[1], 10));
+      });
 
       currentNoteId = localStorage.getItem(currentNoteKey) || notes[0].id;
       if (!notes.some((note) => note.id === currentNoteId)) {
@@ -1763,7 +1800,7 @@
       if (!note) {
         return;
       }
-      editor.innerHTML = note.content || defaultNoteContent();
+      editor.innerHTML = note.content || defaultNoteContent(note.title);
       hydrateRichBlocks();
       updateMetrics();
       updateToolbarState();
@@ -1776,7 +1813,6 @@
         return;
       }
       note.content = serializeEditorHTML();
-      note.title = noteTitleFromContent(note.content);
       note.updatedAt = Date.now();
       persistNotes();
       renderNotesList();
@@ -1790,15 +1826,98 @@
       focusEditor();
     }
 
+    let noteCounter = 0;
+    function nextNoteNumber() {
+      noteCounter = Math.max(noteCounter, notes.length);
+      return ++noteCounter;
+    }
+
     function createNote() {
       saveCurrentNoteContent();
-      const note = createNoteRecord(`Note ${notes.length + 1}`);
+      const note = createNoteRecord(`Note ${nextNoteNumber()}`);
       notes.unshift(note);
       currentNoteId = note.id;
       renderNotesList();
       loadCurrentNote();
       announce("New note");
       focusEditor();
+    }
+
+    // ── Note context menu (right-click) ─────────────────────────────
+    let noteCtxEl = null;
+
+    function showNoteContextMenu(x, y, noteId) {
+      closeNoteContextMenu();
+      const menu = document.createElement("div");
+      menu.className = "note-ctx";
+      menu.style.left = Math.min(x, window.innerWidth - 140) + "px";
+      menu.style.top = Math.min(y, window.innerHeight - 50) + "px";
+
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.textContent = "Rename";
+      renameBtn.addEventListener("click", () => {
+        closeNoteContextMenu();
+        startNoteRename(noteId);
+      });
+      menu.appendChild(renameBtn);
+
+      document.body.appendChild(menu);
+      noteCtxEl = menu;
+    }
+
+    function closeNoteContextMenu() {
+      if (noteCtxEl) {
+        noteCtxEl.remove();
+        noteCtxEl = null;
+      }
+    }
+
+    document.addEventListener("click", (e) => {
+      if (noteCtxEl && !noteCtxEl.contains(e.target)) closeNoteContextMenu();
+    }, true);
+    document.addEventListener("contextmenu", (e) => {
+      if (noteCtxEl && !noteCtxEl.contains(e.target)) closeNoteContextMenu();
+    }, true);
+
+    function startNoteRename(noteId) {
+      const note = notes.find((n) => n.id === noteId);
+      if (!note) return;
+      const item = [...notesList.querySelectorAll(".note-open")].find(
+        (btn) => { const cb = btn._switchId; return cb === noteId; }
+      );
+      // Fallback: find by matching title text
+      const titleEl = item
+        ? item.querySelector(".note-title")
+        : [...notesList.querySelectorAll(".note-title")].find(
+            (el) => el.textContent === note.title
+          );
+      if (!titleEl) return;
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = note.title;
+      input.className = "note-rename-input";
+      input.style.cssText = "width:100%;font:inherit;font-weight:600;font-size:0.88rem;border:1px solid var(--line-strong);border-radius:4px;padding:1px 4px;outline:none;background:#fff;";
+
+      const commit = () => {
+        const val = input.value.trim();
+        if (val && val !== note.title) {
+          note.title = val;
+          persistNotes();
+        }
+        renderNotesList();
+      };
+
+      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+        if (e.key === "Escape") { input.value = note.title; input.blur(); }
+      });
+
+      titleEl.replaceWith(input);
+      input.focus();
+      input.select();
     }
 
     function deleteNote(noteId) {
@@ -1920,6 +2039,7 @@
       editor.querySelectorAll(".math-inline, .math-block").forEach((node) => renderMathWidget(node, false));
       editor.querySelectorAll(".code-runner").forEach((node) => hydrateCodeRunner(node));
       editor.querySelectorAll(".table-widget").forEach((node) => hydrateTableWidget(node));
+      ensureMathBlockTrailing();
     }
 
     function getPlainText() {
@@ -2581,19 +2701,36 @@
           input.focus();
           input.select();
 
-          const commit = () => {
+          function ensureTrailingParagraph() {
+            // For display math (div), make sure there's a paragraph after it to land in
+            if (widget.nodeName === "DIV") {
+              let next = widget.nextSibling;
+              while (next && next.nodeType === Node.TEXT_NODE && !next.nodeValue.trim()) next = next.nextSibling;
+              if (!next || (next.nodeType === Node.ELEMENT_NODE && (next.classList.contains("math-block") || next.classList.contains("code-runner")))) {
+                const p = document.createElement("p");
+                p.innerHTML = "<br>";
+                widget.parentNode.insertBefore(p, widget.nextSibling);
+              }
+            }
+          }
+
+          const commit = (exitAfter = false) => {
             const val = input.value.trim();
             widget.dataset.latex = val || widget.dataset.latex || "";
             widget.classList.remove("math-editing");
             renderMathWidget(widget);
+            if (exitAfter) {
+              ensureTrailingParagraph();
+              placeCaretAfter(widget);
+            }
           };
 
           input.addEventListener("keydown", (ev) => {
-            if (ev.key === "Enter") { ev.preventDefault(); commit(); }
-            if (ev.key === "Escape") { widget.classList.remove("math-editing"); renderMathWidget(widget); }
+            if (ev.key === "Enter") { ev.preventDefault(); commit(true); }
+            if (ev.key === "Escape") { widget.classList.remove("math-editing"); renderMathWidget(widget); placeCaretAfter(widget); ensureTrailingParagraph(); }
             ev.stopPropagation();
           });
-          input.addEventListener("blur", commit, { once: true });
+          input.addEventListener("blur", () => commit(false), { once: true });
         });
         widget.dataset.bound = "true";
       }
@@ -2609,6 +2746,19 @@
       widget.dataset.latex = latex;
       renderMathWidget(widget, false);
       return widget;
+    }
+
+    // Ensure display-mode math blocks always have a following paragraph
+    function ensureMathBlockTrailing() {
+      editor.querySelectorAll(".math-block").forEach((mb) => {
+        let next = mb.nextSibling;
+        while (next && next.nodeType === Node.TEXT_NODE && !next.nodeValue.trim()) next = next.nextSibling;
+        if (!next) {
+          const p = document.createElement("p");
+          p.innerHTML = "<br>";
+          mb.parentNode.insertBefore(p, mb.nextSibling);
+        }
+      });
     }
 
 
